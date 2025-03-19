@@ -13,7 +13,7 @@ npm install -g expo-cli
 ターミナルで
 npx expo start
 
-⑦ 実機で確認
+4.実機で確認
 iPhone：App Storeから「Expo Go」をインストール
 Android：Google Playで「Expo Go」をインストール
 Expo Goを開いて、Metro BundlerのQRコードをスキャン
