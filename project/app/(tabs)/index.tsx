@@ -57,16 +57,18 @@ type Developer = {
 
 type Project = {
   id: string;
+  owner_id: string;
   title: string;
-  company: string;
-  image: string;
+  school: string;
+  image_url: string;
   location: string;
   description: string;
-  skills: string[];
-  teamSize: string;
+  team_size: string;
   duration: string;
   budget: string;
-  type: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
   likes: Like[];
 };
 
@@ -75,7 +77,7 @@ type CardData = Profile | Project;
 const CURRENT_USER_ID = 'current-user';
 
 const WINDOW_HEIGHT = Dimensions.get('window').height;
-const CARD_VERTICAL_MARGIN = 180;
+const CARD_VERTICAL_MARGIN = 240;
 const CARD_HEIGHT = WINDOW_HEIGHT - CARD_VERTICAL_MARGIN;
 
 export default function DiscoverScreen() {
@@ -96,8 +98,12 @@ export default function DiscoverScreen() {
   const swipeDirection = useSharedValue<'left' | 'right' | 'top' | null>(null);
 
   useEffect(() => {
-    fetchProfiles();
-  }, []);
+    if (category === 'engineers') {
+      fetchProfiles();
+    } else {
+      fetchProjects();
+    }
+  }, [category]);
 
   const fetchProfiles = async () => {
     try {
@@ -128,8 +134,35 @@ export default function DiscoverScreen() {
     }
   };
 
+  const fetchProjects = async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        const formattedProjects: Project[] = data.map(project => ({
+          ...project,
+          likes: project.likes || []
+        }));
+        setProjects(formattedProjects);
+      }
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      Alert.alert('エラー', 'プロジェクトの取得に失敗しました。');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const animatedBackground = useAnimatedStyle(() => {
-    let backgroundColor = 'transparent';
+    let backgroundColor = '#ffffff';
     if (swipeDirection.value === 'left') {
       backgroundColor = '#fee2e2';
     } else if (swipeDirection.value === 'right') {
@@ -145,7 +178,7 @@ export default function DiscoverScreen() {
       right: 0,
       bottom: 0,
       backgroundColor,
-      opacity: bgOpacity.value,
+      opacity: swipeDirection.value ? bgOpacity.value : 1,
     };
   });
 
@@ -157,6 +190,24 @@ export default function DiscoverScreen() {
       bgOpacity.value = withTiming(0, { duration: 300 });
       swipeDirection.value = null;
     }, 300);
+  };
+
+  const handleSwiping = (x: number, y: number) => {
+    const threshold = 50;
+    const opacity = Math.min(Math.abs(x) / threshold, 1);
+
+    if (Math.abs(x) > Math.abs(y)) {
+      if (x > 0) {
+        swipeDirection.value = 'right';
+        bgOpacity.value = withTiming(opacity * 0.6, { duration: 0 });
+      } else {
+        swipeDirection.value = 'left';
+        bgOpacity.value = withTiming(opacity * 0.6, { duration: 0 });
+      }
+    } else if (y < 0) {
+      swipeDirection.value = 'top';
+      bgOpacity.value = withTiming(Math.abs(y) / threshold * 0.6, { duration: 0 });
+    }
   };
 
   const handleRefresh = () => {
@@ -301,10 +352,10 @@ export default function DiscoverScreen() {
     return (
       <View style={styles.card}>
         <View style={styles.imageContainer}>
-          <Image source={{ uri: project.image }} style={styles.cardImage} />
+          <Image source={{ uri: project.image_url }} style={styles.cardImage} />
           <View style={styles.imageOverlay}>
             <View style={styles.projectTypeBadge}>
-              <Text style={styles.projectTypeText}>{project.type}</Text>
+              <Text style={styles.projectTypeText}>{project.status}</Text>
             </View>
           </View>
           {renderLikeIndicator(project.likes)}
@@ -313,7 +364,7 @@ export default function DiscoverScreen() {
           <View style={styles.cardHeader}>
             <View style={styles.headerLeft}>
               <Text style={styles.name}>{project.title}</Text>
-              <Text style={styles.title}>{project.company}</Text>
+              <Text style={styles.title}>{project.school}</Text>
             </View>
             <TouchableOpacity
               style={styles.viewProfileButton}
@@ -329,7 +380,7 @@ export default function DiscoverScreen() {
             </View>
             <View style={styles.infoRow}>
               <Users size={16} color="#6b7280" />
-              <Text style={styles.infoText}>{project.teamSize}</Text>
+              <Text style={styles.infoText}>{project.team_size}</Text>
             </View>
             <View style={styles.infoRow}>
               <Clock size={16} color="#6b7280" />
@@ -344,14 +395,6 @@ export default function DiscoverScreen() {
           <Text style={styles.bio} numberOfLines={3}>
             {project.description}
           </Text>
-
-          <View style={styles.skillsContainer}>
-            {project.skills.map((skill, index) => (
-              <View key={index} style={styles.skillBadge}>
-                <Text style={styles.skillText}>{skill}</Text>
-              </View>
-            ))}
-          </View>
         </View>
       </View>
     );
@@ -405,6 +448,8 @@ export default function DiscoverScreen() {
           ref={swiperRef}
           cards={category === 'engineers' ? profiles : projects}
           renderCard={(card) => {
+            if (!card) return null;
+            
             if (category === 'engineers' && 'email' in card) {
               return renderEngineerCard(card as Profile);
             } else if (category === 'projects' && 'description' in card) {
@@ -412,6 +457,7 @@ export default function DiscoverScreen() {
             }
             return null;
           }}
+          onSwiping={handleSwiping}
           onSwipedLeft={(cardIndex) => {
             console.log(`Swiped NOPE on card: ${cardIndex}`);
             handleSwipeFeedback('left');
@@ -421,74 +467,80 @@ export default function DiscoverScreen() {
             handleSwipeFeedback('right');
           }}
           onSwipedTop={(cardIndex) => {
-            console.log(`Swiped SUPER LIKE on card: ${cardIndex}`);
+            console.log(`Swiped SUPERLIKE on card: ${cardIndex}`);
             handleSwipeFeedback('top');
           }}
-          onSwipedAll={handleAllCardsEnd}
+          onSwipedBottom={(cardIndex) => {
+            console.log(`Swiped NOPE on card: ${cardIndex}`);
+            handleSwipeFeedback('left');
+          }}
           cardIndex={0}
-          backgroundColor="transparent"
+          backgroundColor={'transparent'}
           stackSize={3}
-          cardVerticalMargin={20}
-          cardHorizontalMargin={20}
-          verticalSwipe={true}
+          stackScale={10}
+          stackSeparation={14}
           animateOverlayLabelsOpacity
           animateCardOpacity
-          swipeBackCard
-          containerStyle={styles.swiperContainer}
-          cardStyle={styles.swiperCard}
+          disableTopSwipe
+          disableBottomSwipe
           overlayLabels={{
             left: {
-              title: 'スキップ',
+              title: 'Skip',
               style: {
                 label: {
                   backgroundColor: '#ff4f6b',
                   color: 'white',
-                  fontSize: 24,
-                  borderRadius: 4,
-                  padding: 10,
+                  fontSize: 32,
+                  fontWeight: 'bold',
+                  borderRadius: 8,
+                  padding: 15,
+                  borderWidth: 2,
+                  borderColor: 'white',
+                  shadowColor: '#000',
+                  shadowOffset: {
+                    width: 0,
+                    height: 2,
+                  },
+                  shadowOpacity: 0.25,
+                  shadowRadius: 4,
+                  elevation: 5,
                 },
                 wrapper: {
                   flexDirection: 'column',
                   alignItems: 'flex-end',
                   justifyContent: 'flex-start',
-                  marginTop: 30,
-                  marginLeft: -30,
+                  marginTop: 40,
+                  marginLeft: -40,
                 },
               },
             },
             right: {
-              title: 'いいね！',
+              title: 'Like',
               style: {
                 label: {
                   backgroundColor: '#4fcc94',
                   color: 'white',
-                  fontSize: 24,
-                  borderRadius: 4,
-                  padding: 10,
+                  fontSize: 32,
+                  fontWeight: 'bold',
+                  borderRadius: 8,
+                  padding: 15,
+                  borderWidth: 2,
+                  borderColor: 'white',
+                  shadowColor: '#000',
+                  shadowOffset: {
+                    width: 0,
+                    height: 2,
+                  },
+                  shadowOpacity: 0.25,
+                  shadowRadius: 4,
+                  elevation: 5,
                 },
                 wrapper: {
                   flexDirection: 'column',
                   alignItems: 'flex-start',
                   justifyContent: 'flex-start',
-                  marginTop: 30,
-                  marginLeft: 30,
-                },
-              },
-            },
-            top: {
-              title: 'スーパーいいね！',
-              style: {
-                label: {
-                  backgroundColor: '#6366f1',
-                  color: 'white',
-                  fontSize: 24,
-                  borderRadius: 4,
-                  padding: 10,
-                },
-                wrapper: {
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  marginTop: 40,
+                  marginLeft: 40,
                 },
               },
             },
@@ -707,6 +759,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
+    maxHeight: 500,
   },
   imageContainer: {
     position: 'relative',

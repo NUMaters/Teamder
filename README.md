@@ -8,10 +8,12 @@ npm install
 
 2.Expo CLIをインストール（まだなら）
 npm install -g expo-cli
+npm install anser
+
 
 3.ローカルで実行
 ターミナルで
-npx expo start
+npx expo start -c
 
 4.実機で確認
 iPhone：App Storeから「Expo Go」をインストール
