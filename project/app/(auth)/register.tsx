@@ -1,19 +1,34 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Image, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Image, ScrollView, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Mail, Lock, ArrowLeft } from 'lucide-react-native';
+import { Mail, Lock, ArrowLeft, Loader2 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
-
-type UserType = 'engineer' | 'recruiter';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function RegisterScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [userType, setUserType] = useState<UserType>('engineer');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [focusedInput, setFocusedInput] = useState<'email' | 'password' | 'confirmPassword' | null>(null);
+
+  const spinValue = new Animated.Value(0);
+  const spin = spinValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg']
+  });
+
+  const startSpinning = () => {
+    Animated.loop(
+      Animated.timing(spinValue, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      })
+    ).start();
+  };
 
   const handleRegister = async () => {
     if (!email || !password || !confirmPassword) {
@@ -33,6 +48,7 @@ export default function RegisterScreen() {
 
     try {
       setLoading(true);
+      startSpinning();
       setError(null);
 
       const { error: signUpError, data: { user } } = await supabase.auth.signUp({
@@ -48,17 +64,6 @@ export default function RegisterScreen() {
       }
 
       if (user) {
-        // Update the user's profile with type
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({ type: userType })
-          .eq('id', user.id);
-
-        if (updateError) {
-          throw updateError;
-        }
-
-        // Redirect to profile setup
         router.replace(`/profile/setup`);
       }
     } catch (error) {
@@ -76,7 +81,10 @@ export default function RegisterScreen() {
           source={{ uri: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800' }}
           style={styles.headerImage}
         />
-        <View style={styles.overlay} />
+        <LinearGradient
+          colors={['rgba(79, 70, 229, 0.8)', 'rgba(99, 102, 241, 0.6)']}
+          style={styles.overlay}
+        />
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}>
@@ -85,45 +93,28 @@ export default function RegisterScreen() {
         <View style={styles.headerContent}>
           <Text style={styles.title}>新規登録</Text>
           <Text style={styles.subtitle}>
-            エンジニアとして登録、またはプロジェクトを掲載
+            アカウントを作成して始めましょう
           </Text>
         </View>
       </View>
 
       <View style={styles.form}>
         {error && (
-          <View style={styles.errorContainer}>
+          <Animated.View 
+            style={[
+              styles.errorContainer,
+              { transform: [{ translateX: new Animated.Value(0) }] }
+            ]}
+          >
             <Text style={styles.errorText}>{error}</Text>
-          </View>
+          </Animated.View>
         )}
 
-        <View style={styles.userTypeContainer}>
-          <TouchableOpacity
-            style={[
-              styles.userTypeButton,
-              userType === 'engineer' && styles.userTypeButtonActive
-            ]}
-            onPress={() => setUserType('engineer')}>
-            <Text style={[
-              styles.userTypeText,
-              userType === 'engineer' && styles.userTypeTextActive
-            ]}>エンジニア</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.userTypeButton,
-              userType === 'recruiter' && styles.userTypeButtonActive
-            ]}
-            onPress={() => setUserType('recruiter')}>
-            <Text style={[
-              styles.userTypeText,
-              userType === 'recruiter' && styles.userTypeTextActive
-            ]}>採用担当者</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Mail size={20} color="#6b7280" />
+        <View style={[
+          styles.inputContainer,
+          focusedInput === 'email' && styles.inputContainerFocused
+        ]}>
+          <Mail size={20} color={focusedInput === 'email' ? '#6366f1' : '#6b7280'} />
           <TextInput
             style={styles.input}
             placeholder="メールアドレス"
@@ -132,11 +123,17 @@ export default function RegisterScreen() {
             autoCapitalize="none"
             keyboardType="email-address"
             editable={!loading}
+            onFocus={() => setFocusedInput('email')}
+            onBlur={() => setFocusedInput(null)}
+            placeholderTextColor="#9ca3af"
           />
         </View>
 
-        <View style={styles.inputContainer}>
-          <Lock size={20} color="#6b7280" />
+        <View style={[
+          styles.inputContainer,
+          focusedInput === 'password' && styles.inputContainerFocused
+        ]}>
+          <Lock size={20} color={focusedInput === 'password' ? '#6366f1' : '#6b7280'} />
           <TextInput
             style={styles.input}
             placeholder="パスワード"
@@ -144,11 +141,17 @@ export default function RegisterScreen() {
             onChangeText={setPassword}
             secureTextEntry
             editable={!loading}
+            onFocus={() => setFocusedInput('password')}
+            onBlur={() => setFocusedInput(null)}
+            placeholderTextColor="#9ca3af"
           />
         </View>
 
-        <View style={styles.inputContainer}>
-          <Lock size={20} color="#6b7280" />
+        <View style={[
+          styles.inputContainer,
+          focusedInput === 'confirmPassword' && styles.inputContainerFocused
+        ]}>
+          <Lock size={20} color={focusedInput === 'confirmPassword' ? '#6366f1' : '#6b7280'} />
           <TextInput
             style={styles.input}
             placeholder="パスワード（確認）"
@@ -156,6 +159,9 @@ export default function RegisterScreen() {
             onChangeText={setConfirmPassword}
             secureTextEntry
             editable={!loading}
+            onFocus={() => setFocusedInput('confirmPassword')}
+            onBlur={() => setFocusedInput(null)}
+            placeholderTextColor="#9ca3af"
           />
         </View>
 
@@ -163,9 +169,13 @@ export default function RegisterScreen() {
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleRegister}
           disabled={loading}>
-          <Text style={styles.buttonText}>
-            {loading ? '登録中...' : 'アカウントを作成'}
-          </Text>
+          {loading ? (
+            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+              <Loader2 size={24} color="#fff" />
+            </Animated.View>
+          ) : (
+            <Text style={styles.buttonText}>アカウントを作成</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -187,7 +197,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   header: {
-    height: 240,
+    height: 280,
     position: 'relative',
   },
   headerImage: {
@@ -196,7 +206,6 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(79, 70, 229, 0.4)',
   },
   backButton: {
     position: 'absolute',
@@ -208,79 +217,102 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   headerContent: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 20,
+    padding: 24,
   },
   title: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 36,
+    fontWeight: '800',
     color: '#fff',
-    marginBottom: 8,
+    marginBottom: 12,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#fff',
-    opacity: 0.9,
+    opacity: 0.95,
+    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   form: {
     flex: 1,
-    padding: 20,
-    marginTop: -20,
+    padding: 24,
+    marginTop: -24,
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  userTypeContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-  },
-  userTypeButton: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  userTypeButtonActive: {
-    backgroundColor: '#6366f1',
-  },
-  userTypeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  userTypeTextActive: {
-    color: '#ffffff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   errorContainer: {
-    backgroundColor: '#fee2e2',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    backgroundColor: '#fef2f2',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#fee2e2',
   },
   errorText: {
     color: '#dc2626',
     fontSize: 14,
+    fontWeight: '500',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f9fafb',
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: 16,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#e5e7eb',
+    height: 56,
+  },
+  inputContainerFocused: {
+    borderColor: '#6366f1',
+    backgroundColor: '#fff',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#6366f1',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   input: {
     flex: 1,
-    paddingVertical: 12,
     marginLeft: 12,
     fontSize: 16,
     color: '#1f2937',
@@ -288,21 +320,20 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: '#6366f1',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 12,
+    height: 56,
+    justifyContent: 'center',
     ...Platform.select({
       ios: {
         shadowColor: '#6366f1',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
-        shadowRadius: 8,
+        shadowRadius: 12,
       },
       android: {
         elevation: 8,
-      },
-      web: {
-        boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.3)',
       },
     }),
   },
@@ -318,12 +349,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
-    gap: 4,
+    marginTop: 20,
+    gap: 6,
+    padding: 12,
   },
   loginButtonText: {
     color: '#6366f1',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '500',
   },
 });
