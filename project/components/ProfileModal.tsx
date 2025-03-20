@@ -1,13 +1,40 @@
-import { Modal, View, StyleSheet, TouchableOpacity, Platform, Dimensions } from 'react-native';
-import { X } from 'lucide-react-native';
+import { Modal, View, StyleSheet, TouchableOpacity, Platform, Dimensions, Text } from 'react-native';
+import { X, Github, Twitter } from 'lucide-react-native';
 import ProfileContent from './ProfileContent';
+import { Linking } from 'react-native';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+
+type ProfileData = {
+  name: string;
+  title: string;
+  location: string;
+  email: string;
+  website: string;
+  image: string;
+  cover: string;
+  bio: string;
+  academic: {
+    school: string; // 学校情報を単一のフィールドに変更
+  };
+  skills: Array<{ name: string; level: string }>;
+  interests: string[];
+  github_username: string | null;
+  twitter_username: string | null;
+  activities: Array<{
+    id: string;
+    title: string;
+    organization: string;
+    period: string;
+    description: string;
+  }>;
+  certifications: string[];
+};
 
 interface ProfileModalProps {
   isVisible: boolean;
   onClose: () => void;
-  profileData: any;
+  profileData: ProfileData;
   isOwnProfile?: boolean;
 }
 
@@ -29,6 +56,37 @@ export default function ProfileModal({ isVisible, onClose, profileData, isOwnPro
             <X size={24} color="#6b7280" />
           </TouchableOpacity>
           <ProfileContent profileData={profileData} isOwnProfile={isOwnProfile} />
+
+          {/* 学歴セクション */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>学歴</Text>
+            <Text style={styles.sectionText}>{profileData.academic.school}</Text>
+          </View>
+
+          {/* SNSアカウントセクション */}
+          {(profileData.github_username || profileData.twitter_username) && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>SNSアカウント</Text>
+              <View style={styles.socialLinks}>
+                {profileData.github_username && (
+                  <TouchableOpacity
+                    style={styles.socialButton}
+                    onPress={() => Linking.openURL(`https://github.com/${profileData.github_username}`)}>
+                    <Github size={20} color="#333" />
+                    <Text style={styles.socialButtonText}>{profileData.github_username}</Text>
+                  </TouchableOpacity>
+                )}
+                {profileData.twitter_username && (
+                  <TouchableOpacity
+                    style={styles.socialButton}
+                    onPress={() => Linking.openURL(`https://twitter.com/${profileData.twitter_username}`)}>
+                    <Twitter size={20} color="#1DA1F2" />
+                    <Text style={styles.socialButtonText}>{profileData.twitter_username}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -90,5 +148,37 @@ const styles = StyleSheet.create({
         boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
       },
     }),
+  },
+  section: {
+    padding: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  sectionText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  socialLinks: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 8,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  socialButtonText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
   },
 });
