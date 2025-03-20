@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, Image, Dimensions, TouchableOpacity, Platform, Alert } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import { Code as Code2, Briefcase, MapPin, Rocket, Users, Building2, CircleUser as UserCircle2, Plus, Calendar, Clock, CreditCard, SwitchCamera, RefreshCw, Heart, Star, Settings, ListTodo, RotateCcw } from 'lucide-react-native';
@@ -8,6 +9,7 @@ import ProfileModal from '@/components/ProfileModal';
 import ProjectModal from '@/components/ProjectModal';
 import CreateProjectModal from '@/components/CreateProjectModal';
 import type { ProjectFormData } from '@/components/CreateProjectModal';
+import { supabase } from '@/lib/supabase';
 
 type Category = 'engineers' | 'projects';
 type LikeType = 'like' | 'superlike';
@@ -17,72 +19,60 @@ type Like = {
   type: LikeType;
 };
 
+type Profile = {
+  id: string;
+  name: string;
+  title: string;
+  location: string;
+  email: string;
+  website: string;
+  image_url: string;
+  cover_url: string;
+  bio: string;
+  school: string;
+  github_username: string;
+  twitter_username: string;
+  interests: string[];
+  skills: string[];
+  created_at: string;
+  updated_at: string;
+  age: number;
+  likes: Like[];
+};
+
+type Developer = {
+  id: string;
+  name: string;
+  age: number;
+  title: string;
+  location: string;
+  image: string;
+  bio: string;
+  skills: string[];
+  experience: string;
+  education: string;
+  company: string;
+  likes: Like[];
+};
+
+type Project = {
+  id: string;
+  title: string;
+  company: string;
+  image: string;
+  location: string;
+  description: string;
+  skills: string[];
+  teamSize: string;
+  duration: string;
+  budget: string;
+  type: string;
+  likes: Like[];
+};
+
+type CardData = Profile | Project;
+
 const CURRENT_USER_ID = 'current-user';
-
-const DUMMY_DEVELOPERS = [
-  {
-    id: '1',
-    name: '田中 美咲',
-    age: 27,
-    title: 'フルスタックエンジニア',
-    location: '東京都',
-    image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400',
-    bio: 'フルスタックエンジニアとして5年の経験があります。主にReactとNode.jsを使用したWeb開発を得意としています。',
-    skills: ['React', 'Node.js', 'TypeScript', 'Python', 'AWS'],
-    experience: '5年',
-    education: '東京工科大学 情報工学科',
-    company: 'テックスタートアップ株式会社',
-    likes: [
-      { userId: 'user-2', type: 'superlike' as LikeType },
-      { userId: CURRENT_USER_ID, type: 'like' as LikeType },
-    ],
-  },
-  {
-    id: '2',
-    name: '佐藤 健一',
-    age: 25,
-    title: 'バックエンドエンジニア',
-    location: '大阪府',
-    image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
-    bio: 'バックエンドエンジニアとして3年の経験があります。GoとPythonを使用したマイクロサービスの開発を担当しています。',
-    skills: ['Go', 'Python', 'Docker', 'Kubernetes', 'PostgreSQL'],
-    experience: '3年',
-    education: '大阪工業大学 情報科学科',
-    company: 'フィンテックラボ株式会社',
-    likes: [],
-  },
-];
-
-const DUMMY_PROJECTS = [
-  {
-    id: '1',
-    title: 'AIチャットボットプラットフォーム開発',
-    company: 'テックスタートアップ株式会社',
-    image: 'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=400',
-    location: 'リモート可',
-    description: '最新のAI技術を活用したチャットボットプラットフォームの開発。自然言語処理とマルチモーダルAIの統合が主なチャレンジです。',
-    skills: ['Python', 'TensorFlow', 'React', 'Node.js', 'AWS'],
-    teamSize: '4-6名',
-    duration: '6ヶ月',
-    budget: '〜100万円/月',
-    type: 'スタートアップ',
-    likes: [{ userId: CURRENT_USER_ID, type: 'superlike' }],
-  },
-  {
-    id: '2',
-    title: 'フィンテックアプリのリニューアル',
-    company: 'フィンテックラボ株式会社',
-    image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400',
-    location: 'ハイブリッド',
-    description: '既存の資産管理アプリのUIリニューアルとパフォーマンス改善プロジェクト。最新のフロントエンド技術でのリプレイスを予定しています。',
-    skills: ['React Native', 'TypeScript', 'GraphQL', 'Firebase'],
-    teamSize: '3-4名',
-    duration: '4ヶ月',
-    budget: '〜80万円/月',
-    type: '自社開発',
-    likes: [],
-  },
-];
 
 const WINDOW_HEIGHT = Dimensions.get('window').height;
 const CARD_VERTICAL_MARGIN = 180;
@@ -91,16 +81,52 @@ const CARD_HEIGHT = WINDOW_HEIGHT - CARD_VERTICAL_MARGIN;
 export default function DiscoverScreen() {
   const router = useRouter();
   const [category, setCategory] = useState<Category>('engineers');
-  const [selectedProfile, setSelectedProfile] = useState<typeof DUMMY_DEVELOPERS[0] | null>(null);
-  const [selectedProject, setSelectedProject] = useState<typeof DUMMY_PROJECTS[0] | null>(null);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
   const [isProjectModalVisible, setIsProjectModalVisible] = useState(false);
   const [isCreateProjectModalVisible, setIsCreateProjectModalVisible] = useState(false);
   const [showRecyclePrompt, setShowRecyclePrompt] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const swiperRef = useRef(null);
 
   const bgOpacity = useSharedValue(0);
   const swipeDirection = useSharedValue<'left' | 'right' | 'top' | null>(null);
+
+  useEffect(() => {
+    fetchProfiles();
+  }, []);
+
+  const fetchProfiles = async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        const formattedProfiles: Profile[] = data.map(profile => ({
+          ...profile,
+          interests: profile.interests || [],
+          skills: profile.skills || [],
+          likes: profile.likes || []
+        }));
+        setProfiles(formattedProfiles);
+      }
+    } catch (error) {
+      console.error('Error fetching profiles:', error);
+      Alert.alert('エラー', 'プロフィールの取得に失敗しました。');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const animatedBackground = useAnimatedStyle(() => {
     let backgroundColor = 'transparent';
@@ -139,14 +165,15 @@ export default function DiscoverScreen() {
       swiperRef.current.jumpToCardIndex(0);
       setShowRecyclePrompt(false);
     }
+    fetchProfiles();
   };
 
-  const handleViewProfile = (developer: typeof DUMMY_DEVELOPERS[0]) => {
-    setSelectedProfile(developer);
+  const handleViewProfile = (profile: Profile) => {
+    setSelectedProfile(profile);
     setIsProfileModalVisible(true);
   };
 
-  const handleViewProject = (project: typeof DUMMY_PROJECTS[0]) => {
+  const handleViewProject = (project: Project) => {
     setSelectedProject(project);
     setIsProjectModalVisible(true);
   };
@@ -220,50 +247,46 @@ export default function DiscoverScreen() {
     return null;
   };
 
-  const renderEngineerCard = (developer: typeof DUMMY_DEVELOPERS[0]) => {
+  const renderEngineerCard = (profile: Profile) => {
     return (
       <View style={styles.card}>
         <View style={styles.imageContainer}>
-          <Image source={{ uri: developer.image }} style={styles.cardImage} />
+          <Image source={{ uri: profile.image_url }} style={styles.cardImage} />
           <View style={styles.imageOverlay}>
-            <Text style={styles.age}>{developer.age}歳</Text>
+            <Text style={styles.age}>{profile.age}歳</Text>
           </View>
-          {renderLikeIndicator(developer.likes)}
+          {renderLikeIndicator(profile.likes)}
         </View>
         <View style={styles.cardContent}>
           <View style={styles.cardHeader}>
             <View style={styles.headerLeft}>
-              <Text style={styles.name}>{developer.name}</Text>
-              <Text style={styles.title}>{developer.title}</Text>
+              <Text style={styles.name}>{profile.name}</Text>
+              <Text style={styles.title}>{profile.title}</Text>
             </View>
             <TouchableOpacity
               style={styles.viewProfileButton}
-              onPress={() => handleViewProfile(developer)}>
+              onPress={() => handleViewProfile(profile)}>
               <UserCircle2 size={24} color="#6366f1" />
             </TouchableOpacity>
           </View>
 
           <View style={styles.infoContainer}>
             <View style={styles.infoRow}>
-              <Briefcase size={16} color="#6b7280" />
-              <Text style={styles.infoText}>{developer.company}</Text>
-            </View>
-            <View style={styles.infoRow}>
               <MapPin size={16} color="#6b7280" />
-              <Text style={styles.infoText}>{developer.location}</Text>
+              <Text style={styles.infoText}>{profile.location}</Text>
             </View>
             <View style={styles.infoRow}>
               <Code2 size={16} color="#6b7280" />
-              <Text style={styles.infoText}>{developer.experience}の経験</Text>
+              <Text style={styles.infoText}>{profile.school}</Text>
             </View>
           </View>
 
           <Text style={styles.bio} numberOfLines={3}>
-            {developer.bio}
+            {profile.bio}
           </Text>
 
           <View style={styles.skillsContainer}>
-            {developer.skills.map((skill, index) => (
+            {profile.skills.map((skill, index) => (
               <View key={index} style={styles.skillBadge}>
                 <Text style={styles.skillText}>{skill}</Text>
               </View>
@@ -274,7 +297,7 @@ export default function DiscoverScreen() {
     );
   };
 
-  const renderProjectCard = (project: typeof DUMMY_PROJECTS[0]) => {
+  const renderProjectCard = (project: Project) => {
     return (
       <View style={styles.card}>
         <View style={styles.imageContainer}>
@@ -334,6 +357,14 @@ export default function DiscoverScreen() {
     );
   };
 
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <Text>読み込み中...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Animated.View style={animatedBackground} />
@@ -370,10 +401,17 @@ export default function DiscoverScreen() {
       </View>
 
       <View style={styles.content}>
-        <Swiper
+        <Swiper<CardData>
           ref={swiperRef}
-          cards={category === 'engineers' ? DUMMY_DEVELOPERS : DUMMY_PROJECTS}
-          renderCard={category === 'engineers' ? renderEngineerCard : renderProjectCard}
+          cards={category === 'engineers' ? profiles : projects}
+          renderCard={(card) => {
+            if (category === 'engineers' && 'email' in card) {
+              return renderEngineerCard(card as Profile);
+            } else if (category === 'projects' && 'description' in card) {
+              return renderProjectCard(card as Project);
+            }
+            return null;
+          }}
           onSwipedLeft={(cardIndex) => {
             console.log(`Swiped NOPE on card: ${cardIndex}`);
             handleSwipeFeedback('left');
@@ -503,21 +541,21 @@ export default function DiscoverScreen() {
             name: selectedProfile.name,
             title: selectedProfile.title,
             location: selectedProfile.location,
-            email: 'example@email.com',
-            website: 'https://example.com',
-            image: selectedProfile.image,
+            email: selectedProfile.email,
+            website: selectedProfile.website,
+            image: selectedProfile.image_url,
             bio: selectedProfile.bio,
             academic: {
-              university: selectedProfile.education.split(' ')[0],
-              faculty: selectedProfile.education.split(' ')[1],
-              department: selectedProfile.education.split(' ')[2] || '',
-              grade: '3年生',
+              university: selectedProfile.school,
+              faculty: '',
+              department: '',
+              grade: '',
               researchLab: '',
               advisor: '',
               gpa: '',
             },
             skills: selectedProfile.skills.map(name => ({ name, level: '中級' })),
-            interests: ['AI', '機械学習', 'Web開発'],
+            interests: selectedProfile.interests,
             languages: [
               { name: '日本語', level: 'ネイティブ' },
               { name: '英語', level: 'ビジネスレベル' }
@@ -578,6 +616,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f3f4f6',
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     paddingTop: Platform.OS === 'web' ? 20 : 60,
