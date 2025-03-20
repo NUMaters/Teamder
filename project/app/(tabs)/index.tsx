@@ -1,57 +1,20 @@
-import React from 'react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { View, Text, StyleSheet, Image, Dimensions, TouchableOpacity, Platform, Alert } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
-import { Code as Code2, Briefcase, MapPin, Rocket, Users, Building2, CircleUser as UserCircle2, Plus, Calendar, Clock, CreditCard, SwitchCamera, RefreshCw, Heart, Star, Settings, ListTodo, RotateCcw, GraduationCap, Github, Twitter } from 'lucide-react-native';
+import { Code as Code2, Briefcase, MapPin, Rocket, Users, Building2, CircleUser as UserCircle2, Plus, Calendar, Clock, CreditCard, SwitchCamera, RefreshCw, Heart, Star, Settings, ListTodo, RotateCcw } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import Animated, { withSpring, withTiming, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import ProfileModal from '@/components/ProfileModal';
 import ProjectModal from '@/components/ProjectModal';
 import CreateProjectModal from '@/components/CreateProjectModal';
 import type { ProjectFormData } from '@/components/CreateProjectModal';
-import { supabase } from '@/lib/supabase';
 
 type Category = 'engineers' | 'projects';
+type LikeType = 'like' | 'superlike';
 
 type Like = {
   userId: string;
-};
-
-type Profile = {
-  id: string;
-  name: string;
-  title: string;
-  location: string;
-  email: string;
-  website: string;
-  image_url: string;
-  cover_url: string;
-  bio: string;
-  school: string;
-  github_username: string | null;
-  twitter_username: string | null;
-  interests: string[];
-  skills: string[];
-  age: number;
-  created_at: string;
-  updated_at: string;
-  likes?: Like[];
-};
-
-type Project = {
-  id: string;
-  title: string;
-  school: string;
-  image: string;
-  location: string;
-  description: string;
-  skills: string[];
-  teamSize: string;
-  duration: string;
-  budget: string;
-  type: string;
-  likes: Like[];
-  company: string;
+  type: LikeType;
 };
 
 const CURRENT_USER_ID = 'current-user';
@@ -94,7 +57,7 @@ const DUMMY_PROJECTS = [
   {
     id: '1',
     title: 'AIチャットボットプラットフォーム開発',
-    school: 'テックスタートアップ株式会社',
+    company: 'テックスタートアップ株式会社',
     image: 'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=400',
     location: 'リモート可',
     description: '最新のAI技術を活用したチャットボットプラットフォームの開発。自然言語処理とマルチモーダルAIの統合が主なチャレンジです。',
@@ -104,12 +67,11 @@ const DUMMY_PROJECTS = [
     budget: '〜100万円/月',
     type: 'スタートアップ',
     likes: [{ userId: CURRENT_USER_ID, type: 'superlike' }],
-    company: 'テックスタートアップ株式会社',
   },
   {
     id: '2',
     title: 'フィンテックアプリのリニューアル',
-    school: 'フィンテックラボ株式会社',
+    company: 'フィンテックラボ株式会社',
     image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400',
     location: 'ハイブリッド',
     description: '既存の資産管理アプリのUIリニューアルとパフォーマンス改善プロジェクト。最新のフロントエンド技術でのリプレイスを予定しています。',
@@ -119,7 +81,6 @@ const DUMMY_PROJECTS = [
     budget: '〜80万円/月',
     type: '自社開発',
     likes: [],
-    company: 'フィンテックラボ株式会社',
   },
 ];
 
@@ -127,18 +88,16 @@ const WINDOW_HEIGHT = Dimensions.get('window').height;
 const CARD_VERTICAL_MARGIN = 180;
 const CARD_HEIGHT = WINDOW_HEIGHT - CARD_VERTICAL_MARGIN;
 
-function DiscoverScreen() {
+export default function DiscoverScreen() {
   const router = useRouter();
   const [category, setCategory] = useState<Category>('engineers');
-  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+  const [selectedProfile, setSelectedProfile] = useState<typeof DUMMY_DEVELOPERS[0] | null>(null);
   const [selectedProject, setSelectedProject] = useState<typeof DUMMY_PROJECTS[0] | null>(null);
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
   const [isProjectModalVisible, setIsProjectModalVisible] = useState(false);
   const [isCreateProjectModalVisible, setIsCreateProjectModalVisible] = useState(false);
   const [showRecyclePrompt, setShowRecyclePrompt] = useState(false);
   const swiperRef = useRef(null);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
 
   const bgOpacity = useSharedValue(0);
   const swipeDirection = useSharedValue<'left' | 'right' | 'top' | null>(null);
@@ -182,8 +141,8 @@ function DiscoverScreen() {
     }
   };
 
-  const handleViewProfile = (profile: Profile) => {
-    setSelectedProfile(profile);
+  const handleViewProfile = (developer: typeof DUMMY_DEVELOPERS[0]) => {
+    setSelectedProfile(developer);
     setIsProfileModalVisible(true);
   };
 
@@ -223,21 +182,36 @@ function DiscoverScreen() {
     
     if (currentUserLike) {
       return (
-        <View style={styles.likeIndicator}>
-          <Heart size={16} color="#ffffff" fill="#ffffff" />
+        <View style={[
+          styles.likeIndicator,
+          currentUserLike.type === 'superlike' ? styles.superLikeIndicator : styles.likeIndicator,
+        ]}>
+          {currentUserLike.type === 'superlike' ? (
+            <Star size={16} color="#ffffff" fill="#ffffff" />
+          ) : (
+            <Heart size={16} color="#ffffff" fill="#ffffff" />
+          )}
           <Text style={styles.likeIndicatorText}>
-            いいね済み
+            {currentUserLike.type === 'superlike' ? 'スーパーいいね済み' : 'いいね済み'}
           </Text>
         </View>
       );
     }
 
     if (otherLikes.length > 0) {
+      const hasSuperLike = otherLikes.some(like => like.type === 'superlike');
       return (
-        <View style={styles.likeIndicator}>
-          <Heart size={16} color="#ffffff" fill="#ffffff" />
+        <View style={[
+          styles.likeIndicator,
+          hasSuperLike ? styles.superLikeIndicator : styles.likeIndicator,
+        ]}>
+          {hasSuperLike ? (
+            <Star size={16} color="#ffffff" fill="#ffffff" />
+          ) : (
+            <Heart size={16} color="#ffffff" fill="#ffffff" />
+          )}
           <Text style={styles.likeIndicatorText}>
-            いいねされています
+            {hasSuperLike ? 'スーパーいいねされています' : 'いいねされています'}
           </Text>
         </View>
       );
@@ -246,82 +220,50 @@ function DiscoverScreen() {
     return null;
   };
 
-  const fetchProfiles = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-
-      setProfiles(data || []);
-    } catch (error) {
-      console.error('Error fetching profiles:', error);
-      Alert.alert('エラー', 'プロフィールの取得に失敗しました');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchProfiles();
-  }, []);
-
-  const renderEngineerCard = (profile: Profile) => {
+  const renderEngineerCard = (developer: typeof DUMMY_DEVELOPERS[0]) => {
     return (
       <View style={styles.card}>
         <View style={styles.imageContainer}>
-          <Image 
-            source={
-              profile.image_url 
-                ? { uri: profile.image_url }
-                : require('@/assets/images/default-icon.jpg')
-            } 
-            style={styles.cardImage} 
-          />
+          <Image source={{ uri: developer.image }} style={styles.cardImage} />
           <View style={styles.imageOverlay}>
-            <Text style={styles.age}>{profile.age}歳</Text>
+            <Text style={styles.age}>{developer.age}歳</Text>
           </View>
-          {profile.likes && renderLikeIndicator(profile.likes)}
+          {renderLikeIndicator(developer.likes)}
         </View>
         <View style={styles.cardContent}>
           <View style={styles.cardHeader}>
             <View style={styles.headerLeft}>
-              <Text style={styles.name}>{profile.name}</Text>
-              <Text style={styles.title}>{profile.title}</Text>
+              <Text style={styles.name}>{developer.name}</Text>
+              <Text style={styles.title}>{developer.title}</Text>
             </View>
             <TouchableOpacity
               style={styles.viewProfileButton}
-              onPress={() => handleViewProfile(profile)}>
+              onPress={() => handleViewProfile(developer)}>
               <UserCircle2 size={24} color="#6366f1" />
             </TouchableOpacity>
           </View>
 
           <View style={styles.infoContainer}>
-            {profile.school && (
-              <View style={styles.infoRow}>
-                <GraduationCap size={16} color="#6b7280" />
-                <Text style={styles.infoText}>{profile.school}</Text>
-              </View>
-            )}
-            {profile.location && (
-              <View style={styles.infoRow}>
-                <MapPin size={16} color="#6b7280" />
-                <Text style={styles.infoText}>{profile.location}</Text>
-              </View>
-            )}
+            <View style={styles.infoRow}>
+              <Briefcase size={16} color="#6b7280" />
+              <Text style={styles.infoText}>{developer.company}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <MapPin size={16} color="#6b7280" />
+              <Text style={styles.infoText}>{developer.location}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Code2 size={16} color="#6b7280" />
+              <Text style={styles.infoText}>{developer.experience}の経験</Text>
+            </View>
           </View>
 
           <Text style={styles.bio} numberOfLines={3}>
-            {profile.bio || '自己紹介がありません'}
+            {developer.bio}
           </Text>
 
           <View style={styles.skillsContainer}>
-            {profile.skills?.map((skill, index) => (
+            {developer.skills.map((skill, index) => (
               <View key={index} style={styles.skillBadge}>
                 <Text style={styles.skillText}>{skill}</Text>
               </View>
@@ -348,7 +290,7 @@ function DiscoverScreen() {
           <View style={styles.cardHeader}>
             <View style={styles.headerLeft}>
               <Text style={styles.name}>{project.title}</Text>
-              <Text style={styles.title}>{project.school}</Text>
+              <Text style={styles.title}>{project.company}</Text>
             </View>
             <TouchableOpacity
               style={styles.viewProfileButton}
@@ -392,13 +334,6 @@ function DiscoverScreen() {
     );
   };
 
-  const convertProjectData = (project: typeof DUMMY_PROJECTS[0]): Project => {
-    return {
-      ...project,
-      company: project.school,
-    };
-  };
-
   return (
     <View style={styles.container}>
       <Animated.View style={animatedBackground} />
@@ -435,41 +370,92 @@ function DiscoverScreen() {
       </View>
 
       <View style={styles.content}>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text>読み込み中...</Text>
-          </View>
-        ) : (
-          <Swiper
-            ref={swiperRef}
-            cards={category === 'engineers' ? profiles : []}
-            renderCard={renderEngineerCard}
-            onSwipedLeft={(cardIndex) => {
-              console.log(`Swiped NOPE on card: ${cardIndex}`);
-              handleSwipeFeedback('left');
-            }}
-            onSwipedRight={(cardIndex) => {
-              console.log(`Swiped LIKE on card: ${cardIndex}`);
-              handleSwipeFeedback('right');
-            }}
-            onSwipedTop={(cardIndex) => {
-              console.log(`Swiped SUPER LIKE on card: ${cardIndex}`);
-              handleSwipeFeedback('top');
-            }}
-            onSwipedAll={handleAllCardsEnd}
-            cardIndex={0}
-            backgroundColor="transparent"
-            stackSize={3}
-            cardVerticalMargin={20}
-            cardHorizontalMargin={20}
-            verticalSwipe={true}
-            animateOverlayLabelsOpacity
-            animateCardOpacity
-            swipeBackCard
-            containerStyle={styles.swiperContainer}
-            cardStyle={styles.swiperCard}
-          />
-        )}
+        <Swiper
+          ref={swiperRef}
+          cards={category === 'engineers' ? DUMMY_DEVELOPERS : DUMMY_PROJECTS}
+          renderCard={category === 'engineers' ? renderEngineerCard : renderProjectCard}
+          onSwipedLeft={(cardIndex) => {
+            console.log(`Swiped NOPE on card: ${cardIndex}`);
+            handleSwipeFeedback('left');
+          }}
+          onSwipedRight={(cardIndex) => {
+            console.log(`Swiped LIKE on card: ${cardIndex}`);
+            handleSwipeFeedback('right');
+          }}
+          onSwipedTop={(cardIndex) => {
+            console.log(`Swiped SUPER LIKE on card: ${cardIndex}`);
+            handleSwipeFeedback('top');
+          }}
+          onSwipedAll={handleAllCardsEnd}
+          cardIndex={0}
+          backgroundColor="transparent"
+          stackSize={3}
+          cardVerticalMargin={20}
+          cardHorizontalMargin={20}
+          verticalSwipe={true}
+          animateOverlayLabelsOpacity
+          animateCardOpacity
+          swipeBackCard
+          containerStyle={styles.swiperContainer}
+          cardStyle={styles.swiperCard}
+          overlayLabels={{
+            left: {
+              title: 'スキップ',
+              style: {
+                label: {
+                  backgroundColor: '#ff4f6b',
+                  color: 'white',
+                  fontSize: 24,
+                  borderRadius: 4,
+                  padding: 10,
+                },
+                wrapper: {
+                  flexDirection: 'column',
+                  alignItems: 'flex-end',
+                  justifyContent: 'flex-start',
+                  marginTop: 30,
+                  marginLeft: -30,
+                },
+              },
+            },
+            right: {
+              title: 'いいね！',
+              style: {
+                label: {
+                  backgroundColor: '#4fcc94',
+                  color: 'white',
+                  fontSize: 24,
+                  borderRadius: 4,
+                  padding: 10,
+                },
+                wrapper: {
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  justifyContent: 'flex-start',
+                  marginTop: 30,
+                  marginLeft: 30,
+                },
+              },
+            },
+            top: {
+              title: 'スーパーいいね！',
+              style: {
+                label: {
+                  backgroundColor: '#6366f1',
+                  color: 'white',
+                  fontSize: 24,
+                  borderRadius: 4,
+                  padding: 10,
+                },
+                wrapper: {
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                },
+              },
+            },
+          }}
+        />
       </View>
 
       <View style={styles.bottomButtons}>
@@ -517,18 +503,31 @@ function DiscoverScreen() {
             name: selectedProfile.name,
             title: selectedProfile.title,
             location: selectedProfile.location,
-            email: selectedProfile.email,
-            website: selectedProfile.website,
-            image: selectedProfile.image_url,
-            cover: selectedProfile.cover_url,
+            email: 'example@email.com',
+            website: 'https://example.com',
+            image: selectedProfile.image,
             bio: selectedProfile.bio,
             academic: {
-              school: selectedProfile.school || ''
+              university: selectedProfile.education.split(' ')[0],
+              faculty: selectedProfile.education.split(' ')[1],
+              department: selectedProfile.education.split(' ')[2] || '',
+              grade: '3年生',
+              researchLab: '',
+              advisor: '',
+              gpa: '',
             },
-            skills: selectedProfile.skills?.map(name => ({ name, level: '中級' })) || [],
-            interests: selectedProfile.interests || [],
-            github_username: selectedProfile.github_username,
-            twitter_username: selectedProfile.twitter_username,
+            skills: selectedProfile.skills.map(name => ({ name, level: '中級' })),
+            interests: ['AI', '機械学習', 'Web開発'],
+            languages: [
+              { name: '日本語', level: 'ネイティブ' },
+              { name: '英語', level: 'ビジネスレベル' }
+            ],
+            achievements: {
+              githubContributions: 100,
+              projectsCompleted: 5,
+              hackathonsWon: 1,
+              papers: 0
+            },
             activities: [
               {
                 id: '1',
@@ -537,6 +536,11 @@ function DiscoverScreen() {
                 period: '2023年4月 - 現在',
                 description: '週1回の勉強会を企画・運営'
               }
+            ],
+            coursework: [
+              'プログラミング基礎',
+              'アルゴリズムとデータ構造',
+              'データベース'
             ],
             certifications: [
               '基本情報技術者',
@@ -554,7 +558,7 @@ function DiscoverScreen() {
             setIsProjectModalVisible(false);
             setSelectedProject(null);
           }}
-          project={convertProjectData(selectedProject)}
+          project={selectedProject}
         />
       )}
 
@@ -842,16 +846,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
+  superLikeIndicator: {
+    backgroundColor: '#6366f1',
+  },
   likeIndicatorText: {
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '500',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
 });
-
-export default DiscoverScreen;

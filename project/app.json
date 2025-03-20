@@ -24,15 +24,7 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-    "plugins": [
-      "expo-router",
-      [
-        "react-native-reanimated",
-        {
-          "relativeSourceLocation": true
-        }
-      ]
-    ],
+    "plugins": ["expo-router"],
     "experiments": {
       "typedRoutes": true,
       "tsconfigPaths": true
