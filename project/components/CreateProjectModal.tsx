@@ -1,161 +1,138 @@
-import { useState } from 'react';
-import { Modal, View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Platform } from 'react-native';
-import { X, Plus, ChevronDown } from 'lucide-react-native';
-
-export type ProjectFormData = {
-  title: string;
-  type: string;
-  description: string;
-  skills: string[];
-  teamSize: string;
-  locations: string[];
-};
-
-interface CreateProjectModalProps {
-  isVisible: boolean;
-  onClose: () => void;
-  onSubmit: (project: ProjectFormData) => void;
-}
-
-const INITIAL_FORM_DATA: ProjectFormData = {
-  title: '',
-  type: '',
-  description: '',
-  skills: [],
-  teamSize: '',
-  locations: [],
-};
-
-const PROJECT_TYPES = [
-  'ハッカソン',
-  '勉強会',
-  'LT会',
-  '交流会',
-  'アプリ開発',
-  'Web開発',
-  'AI/ML開発',
-  'オープンソース',
-  'ゲーム開発',
-];
-
-const TEAM_SIZES = [
-  '1人',
-  '2-3人',
-  '4-5人',
-  '6-10人',
-  '10人以上',
-];
-
-const TECH_STACKS = [
-  'JavaScript',
-  'TypeScript',
-  'Python',
-  'Java',
-  'C',
-  'C++',
-  'C#',
-  'Go',
-  'Rust',
-  'Swift',
-  'Kotlin',
-  'PHP',
-  'Ruby',
-  'React',
-  'Vue.js',
-  'Angular',
-  'Node.js',
-  'Django',
-  'Flask',
-  'Spring',
-  'Laravel',
-  'Ruby on Rails',
-  'PostgreSQL',
-  'MySQL',
-  'MongoDB',
-  'Redis',
-  'Docker',
-  'Kubernetes',
-  'AWS',
-  'GCP',
-  'Azure',
-  'Firebase',
-];
+import React, { useState } from 'react';
+import { Modal, View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Image, Alert, KeyboardAvoidingView } from 'react-native';
+import { X, Upload, MapPin, Users, Clock, CreditCard, Activity, ChevronDown } from 'lucide-react-native';
+import { supabase } from '@/lib/supabase';
+import * as ImagePicker from 'expo-image-picker';
 
 const LOCATIONS = [
   'オンライン',
-  '北海道',
-  '青森県',
-  '岩手県',
-  '宮城県',
-  '秋田県',
-  '山形県',
-  '福島県',
-  '茨城県',
-  '栃木県',
-  '群馬県',
-  '埼玉県',
-  '千葉県',
-  '東京都',
-  '神奈川県',
-  '新潟県',
-  '富山県',
-  '石川県',
-  '福井県',
-  '山梨県',
-  '長野県',
-  '岐阜県',
-  '静岡県',
-  '愛知県',
-  '三重県',
-  '滋賀県',
-  '京都府',
-  '大阪府',
-  '兵庫県',
-  '奈良県',
-  '和歌山県',
-  '鳥取県',
-  '島根県',
-  '岡山県',
-  '広島県',
-  '山口県',
-  '徳島県',
-  '香川県',
-  '愛媛県',
-  '高知県',
-  '福岡県',
-  '佐賀県',
-  '長崎県',
-  '熊本県',
-  '大分県',
-  '宮崎県',
-  '鹿児島県',
-  '沖縄県',
+  '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
+  '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県',
+  '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県', '岐阜県',
+  '静岡県', '愛知県', '三重県', '滋賀県', '京都府', '大阪府', '兵庫県',
+  '奈良県', '和歌山県', '鳥取県', '島根県', '岡山県', '広島県', '山口県',
+  '徳島県', '香川県', '愛媛県', '高知県', '福岡県', '佐賀県', '長崎県',
+  '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県'
 ];
 
+const TEAM_SIZES = [
+  '1-2名',
+  '3-4名',
+  '5-6名',
+  '7-10名',
+  '10名以上'
+];
+
+const PROJECT_STATUSES = [
+  '募集中',
+  '停止中',
+  '準備中'
+];
+
+const SKILLS = [
+  'JavaScript', 'TypeScript', 'Python', 'Java', 'C', 'C++', 'C#', 'Go', 'Rust',
+  'Swift', 'Kotlin', 'PHP', 'Ruby', 'React', 'Vue.js', 'Angular', 'Node.js',
+  'Django', 'Flask', 'Spring', 'Laravel', 'Ruby on Rails', 'PostgreSQL',
+  'MySQL', 'MongoDB', 'Redis', 'Docker', 'Kubernetes', 'AWS', 'GCP', 'Azure',
+  'Firebase', 'Git', 'CI/CD', 'UI/UX', 'デザイン', 'プロジェクトマネジメント'
+];
+
+export type ProjectFormData = {
+  title: string;
+  school: string;
+  image_url: string;
+  location: string;
+  description: string;
+  team_size: string;
+  duration: string;
+  budget: string;
+  status: string;
+  skills: string[];
+};
+
+type CreateProjectModalProps = {
+  isVisible: boolean;
+  onClose: () => void;
+  onSubmit: (data: ProjectFormData) => void;
+};
+
 export default function CreateProjectModal({ isVisible, onClose, onSubmit }: CreateProjectModalProps) {
-  const [formData, setFormData] = useState<ProjectFormData>(INITIAL_FORM_DATA);
-  const [errors, setErrors] = useState<Partial<Record<keyof ProjectFormData, string>>>({});
+  const [formData, setFormData] = useState<ProjectFormData>({
+    title: '',
+    school: '',
+    image_url: '',
+    location: '',
+    description: '',
+    team_size: '',
+    duration: '',
+    budget: '',
+    status: '募集中',
+    skills: [],
+  });
+
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showTeamSizeDropdown, setShowTeamSizeDropdown] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showSkillsDropdown, setShowSkillsDropdown] = useState(false);
 
-  const handleSubmit = () => {
-    const newErrors: Partial<Record<keyof ProjectFormData, string>> = {};
+  const pickImage = async () => {
+    try {
+      // 権限をリクエスト
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('エラー', '画像を選択するには権限が必要です。');
+        return;
+      }
 
-    if (!formData.title) newErrors.title = 'プロジェクト名は必須です';
-    if (!formData.type) newErrors.type = 'プロジェクトタイプは必須です';
-    if (!formData.description) newErrors.description = 'プロジェクト概要は必須です';
-    if (!formData.skills.length) newErrors.skills = '必要なスキルは1つ以上必須です';
-    if (!formData.teamSize) newErrors.teamSize = 'チーム規模は必須です';
-    if (!formData.locations.length) newErrors.locations = '募集地域は1つ以上必須です';
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
 
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
+      if (!result.canceled) {
+        const file = result.assets[0];
+        const fileExt = file.uri.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        // バケットが存在しない場合は作成
+        const { data: buckets } = await supabase.storage.listBuckets();
+        const projectImagesBucket = buckets?.find(bucket => bucket.name === 'project-images');
+        
+        if (!projectImagesBucket) {
+          const { error: createBucketError } = await supabase.storage.createBucket('project-images', {
+            public: true,
+            allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif'],
+          });
+          if (createBucketError) throw createBucketError;
+        }
+
+        // 画像をアップロード
+        const { error: uploadError } = await supabase.storage
+          .from('project-images')
+          .upload(filePath, {
+            uri: file.uri,
+            type: `image/${fileExt}`,
+            name: fileName,
+          }, {
+            cacheControl: '3600',
+            upsert: false,
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('project-images')
+          .getPublicUrl(filePath);
+
+        setFormData(prev => ({ ...prev, image_url: publicUrl }));
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      Alert.alert('エラー', '画像のアップロードに失敗しました。');
     }
-
-    onSubmit(formData);
-    setFormData(INITIAL_FORM_DATA);
-    setErrors({});
-    onClose();
   };
 
   const toggleSkill = (skill: string) => {
@@ -167,161 +144,270 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
     }));
   };
 
-  const toggleLocation = (location: string) => {
-    setFormData(prev => ({
-      ...prev,
-      locations: prev.locations.includes(location)
-        ? prev.locations.filter(l => l !== location)
-        : [...prev.locations, location],
-    }));
+  const handleSubmit = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('ユーザーが見つかりません');
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('location')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile) throw new Error('プロフィールが見つかりません');
+
+      const { data, error } = await supabase
+        .from('projects')
+        .insert([
+          {
+            owner_id: user.id,
+            title: formData.title,
+            school: profile.location,
+            image_url: formData.image_url,
+            location: formData.location,
+            description: formData.description,
+            team_size: formData.team_size,
+            duration: formData.duration,
+            budget: formData.budget,
+            status: formData.status,
+            skills: formData.skills,
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      onSubmit(data);
+      setFormData({
+        title: '',
+        school: '',
+        image_url: '',
+        location: '',
+        description: '',
+        team_size: '',
+        duration: '',
+        budget: '',
+        status: '募集中',
+        skills: [],
+      });
+    } catch (error) {
+      console.error('Error creating project:', error);
+      Alert.alert('エラー', 'プロジェクトの作成に失敗しました。');
+    }
   };
 
   return (
     <Modal
       visible={isVisible}
-      onRequestClose={onClose}
       animationType="slide"
-      transparent={true}>
-      <View style={styles.modalContainer}>
+      transparent={true}
+      onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.modalContainer}>
         <View style={styles.modalContent}>
-          <View style={[styles.header, Platform.OS === 'ios' ? { paddingTop: 60 } : { paddingTop: 20 }]}>
-            <Text style={styles.headerTitle}>新規プロジェクト作成</Text>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+          <View style={styles.header}>
+            <Text style={styles.title}>新規プロジェクト作成</Text>
+            <TouchableOpacity onPress={onClose}>
               <X size={24} color="#6b7280" />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.form}>
-            <View style={styles.formGroup}>
+            <TouchableOpacity style={styles.imageUpload} onPress={pickImage}>
+              {formData.image_url ? (
+                <Image source={{ uri: formData.image_url }} style={styles.previewImage} />
+              ) : (
+                <View style={styles.uploadPlaceholder}>
+                  <Upload size={32} color="#6b7280" />
+                  <Text style={styles.uploadText}>画像をアップロード</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.inputGroup}>
               <Text style={styles.label}>プロジェクト名</Text>
               <TextInput
-                style={[styles.input, errors.title && styles.inputError]}
+                style={styles.input}
                 value={formData.title}
-                onChangeText={(text) => setFormData({ ...formData, title: text })}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
                 placeholder="プロジェクト名を入力"
               />
-              {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>プロジェクトタイプ</Text>
-              <View style={styles.typeContainer}>
-                {PROJECT_TYPES.map((type) => (
-                  <TouchableOpacity
-                    key={type}
-                    style={[
-                      styles.typeButton,
-                      formData.type === type && styles.typeButtonActive,
-                    ]}
-                    onPress={() => setFormData({ ...formData, type })}>
-                    <Text
-                      style={[
-                        styles.typeButtonText,
-                        formData.type === type && styles.typeButtonTextActive,
-                      ]}>
-                      {type}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {errors.type && <Text style={styles.errorText}>{errors.type}</Text>}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>場所</Text>
+              <TouchableOpacity
+                style={styles.dropdownButton}
+                onPress={() => setShowLocationDropdown(!showLocationDropdown)}>
+                <Text style={styles.dropdownButtonText}>
+                  {formData.location || '場所を選択'}
+                </Text>
+                <ChevronDown size={20} color="#6b7280" />
+              </TouchableOpacity>
+              {showLocationDropdown && (
+                <View style={styles.dropdownContent}>
+                  <ScrollView>
+                    {LOCATIONS.map((location) => (
+                      <TouchableOpacity
+                        key={location}
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          setFormData(prev => ({ ...prev, location }));
+                          setShowLocationDropdown(false);
+                        }}>
+                        <Text style={styles.dropdownItemText}>{location}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>プロジェクト概要</Text>
-              <TextInput
-                style={[styles.textArea, errors.description && styles.inputError]}
-                value={formData.description}
-                onChangeText={(text) => setFormData({ ...formData, description: text })}
-                placeholder="プロジェクトの詳細な説明を入力"
-                multiline
-                numberOfLines={4}
-              />
-              {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>必要なスキル</Text>
-              <View style={styles.skillsGrid}>
-                {TECH_STACKS.map((skill) => (
-                  <TouchableOpacity
-                    key={skill}
-                    style={[
-                      styles.skillButton,
-                      formData.skills.includes(skill) && styles.skillButtonActive,
-                    ]}
-                    onPress={() => toggleSkill(skill)}>
-                    <Text
-                      style={[
-                        styles.skillButtonText,
-                        formData.skills.includes(skill) && styles.skillButtonTextActive,
-                      ]}>
-                      {skill}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {errors.skills && <Text style={styles.errorText}>{errors.skills}</Text>}
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>募集人数</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>チーム規模</Text>
               <TouchableOpacity
                 style={styles.dropdownButton}
                 onPress={() => setShowTeamSizeDropdown(!showTeamSizeDropdown)}>
                 <Text style={styles.dropdownButtonText}>
-                  {formData.teamSize || '募集人数を選択'}
+                  {formData.team_size || 'チーム規模を選択'}
                 </Text>
                 <ChevronDown size={20} color="#6b7280" />
               </TouchableOpacity>
               {showTeamSizeDropdown && (
                 <View style={styles.dropdownContent}>
-                  {TEAM_SIZES.map((size) => (
-                    <TouchableOpacity
-                      key={size}
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setFormData({ ...formData, teamSize: size });
-                        setShowTeamSizeDropdown(false);
-                      }}>
-                      <Text style={styles.dropdownItemText}>{size}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  <ScrollView>
+                    {TEAM_SIZES.map((size) => (
+                      <TouchableOpacity
+                        key={size}
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          setFormData(prev => ({ ...prev, team_size: size }));
+                          setShowTeamSizeDropdown(false);
+                        }}>
+                        <Text style={styles.dropdownItemText}>{size}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
                 </View>
               )}
-              {errors.teamSize && <Text style={styles.errorText}>{errors.teamSize}</Text>}
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>募集地域</Text>
-              <View style={styles.locationsGrid}>
-                {LOCATIONS.map((location) => (
-                  <TouchableOpacity
-                    key={location}
-                    style={[
-                      styles.locationButton,
-                      formData.locations.includes(location) && styles.locationButtonActive,
-                    ]}
-                    onPress={() => toggleLocation(location)}>
-                    <Text
-                      style={[
-                        styles.locationButtonText,
-                        formData.locations.includes(location) && styles.locationButtonTextActive,
-                      ]}>
-                      {location}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>期間</Text>
+              <View style={styles.inputWithIcon}>
+                <Clock size={20} color="#6b7280" />
+                <TextInput
+                  style={[styles.input, styles.inputWithIconText]}
+                  value={formData.duration}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, duration: text }))}
+                  placeholder="例: 3ヶ月"
+                />
               </View>
-              {errors.locations && <Text style={styles.errorText}>{errors.locations}</Text>}
             </View>
 
-            <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-              <Text style={styles.submitButtonText}>プロジェクトを作成</Text>
-            </TouchableOpacity>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>予算</Text>
+              <View style={styles.inputWithIcon}>
+                <CreditCard size={20} color="#6b7280" />
+                <TextInput
+                  style={[styles.input, styles.inputWithIconText]}
+                  value={formData.budget}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, budget: text }))}
+                  placeholder="例: 〜50万円/月"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>ステータス</Text>
+              <TouchableOpacity
+                style={styles.dropdownButton}
+                onPress={() => setShowStatusDropdown(!showStatusDropdown)}>
+                <Text style={styles.dropdownButtonText}>
+                  {formData.status || 'ステータスを選択'}
+                </Text>
+                <ChevronDown size={20} color="#6b7280" />
+              </TouchableOpacity>
+              {showStatusDropdown && (
+                <View style={styles.dropdownContent}>
+                  <ScrollView>
+                    {PROJECT_STATUSES.map((status) => (
+                      <TouchableOpacity
+                        key={status}
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          setFormData(prev => ({ ...prev, status }));
+                          setShowStatusDropdown(false);
+                        }}>
+                        <Text style={styles.dropdownItemText}>{status}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>求めるスキル</Text>
+              <TouchableOpacity
+                style={styles.dropdownButton}
+                onPress={() => setShowSkillsDropdown(!showSkillsDropdown)}>
+                <Text style={styles.dropdownButtonText}>
+                  {formData.skills.length > 0 ? `${formData.skills.length}個選択中` : 'スキルを選択'}
+                </Text>
+                <ChevronDown size={20} color="#6b7280" />
+              </TouchableOpacity>
+              {showSkillsDropdown && (
+                <View style={styles.skillsDropdownContent}>
+                  <View style={styles.skillsGrid}>
+                    {SKILLS.map((skill) => (
+                      <TouchableOpacity
+                        key={skill}
+                        style={[
+                          styles.skillButton,
+                          formData.skills.includes(skill) && styles.skillButtonActive,
+                        ]}
+                        onPress={() => toggleSkill(skill)}>
+                        <Text
+                          style={[
+                            styles.skillButtonText,
+                            formData.skills.includes(skill) && styles.skillButtonTextActive,
+                          ]}>
+                          {skill}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>プロジェクトの説明</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={formData.description}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, description: text }))}
+                placeholder="プロジェクトの詳細を入力"
+                multiline
+                numberOfLines={4}
+              />
+            </View>
           </ScrollView>
+
+          <View style={styles.footer}>
+            <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+              <Text style={styles.cancelButtonText}>キャンセル</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
+              <Text style={styles.submitButtonText}>作成</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -330,116 +416,119 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#fff',
-    width: '100%',
-    height: '100%',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 5,
-      },
-      android: {
-        elevation: 5,
-      },
-      web: {
-        boxShadow: '0 -2px 10px rgba(0, 0, 0, 0.1)',
-      },
-    }),
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '90%',
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
-    backgroundColor: '#fff',
   },
-  headerTitle: {
+  title: {
     fontSize: 20,
     fontWeight: '600',
     color: '#1f2937',
   },
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f3f4f6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   form: {
+    flex: 1,
     padding: 20,
   },
-  formGroup: {
+  imageUpload: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
     marginBottom: 20,
+    overflow: 'hidden',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  uploadPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  uploadText: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  inputGroup: {
+    marginBottom: 16,
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
-    color: '#1f2937',
+    color: '#374151',
     marginBottom: 8,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
     padding: 12,
     fontSize: 16,
     color: '#1f2937',
-    backgroundColor: '#fff',
   },
-  inputError: {
-    borderColor: '#ef4444',
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  textArea: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: '#1f2937',
-    backgroundColor: '#fff',
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  typeContainer: {
+  inputWithIcon: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    paddingHorizontal: 12,
   },
-  typeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#fff',
+  inputWithIconText: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    padding: 12,
+    paddingLeft: 8,
+  },
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    padding: 12,
+  },
+  dropdownButtonText: {
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  dropdownContent: {
+    marginTop: 4,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e5e7eb',
+    maxHeight: 200,
+    zIndex: 1000,
   },
-  typeButtonActive: {
-    backgroundColor: '#6366f1',
-    borderColor: '#6366f1',
+  dropdownItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
-  typeButtonText: {
-    fontSize: 14,
-    color: '#6b7280',
+  dropdownItemText: {
+    fontSize: 16,
+    color: '#1f2937',
   },
-  typeButtonTextActive: {
-    color: '#fff',
+  skillsDropdownContent: {
+    marginTop: 4,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 12,
   },
   skillsGrid: {
     flexDirection: 'row',
@@ -450,7 +539,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#f3f4f6',
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
@@ -463,103 +552,41 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   skillButtonTextActive: {
-    color: '#fff',
+    color: '#ffffff',
   },
-  dropdownButton: {
+  textArea: {
+    height: 120,
+    textAlignVertical: 'top',
+  },
+  footer: {
     flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#f3f4f6',
+    padding: 16,
+    borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: '#fff',
   },
-  dropdownButtonText: {
+  cancelButtonText: {
     fontSize: 16,
-    color: '#6b7280',
-  },
-  dropdownContent: {
-    marginTop: 4,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 4,
-      },
-      web: {
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-      },
-    }),
-  },
-  dropdownItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  dropdownItemText: {
-    fontSize: 16,
-    color: '#1f2937',
-  },
-  locationsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  locationButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  locationButtonActive: {
-    backgroundColor: '#6366f1',
-    borderColor: '#6366f1',
-  },
-  locationButtonText: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  locationButtonTextActive: {
-    color: '#fff',
+    fontWeight: '600',
+    color: '#4b5563',
   },
   submitButton: {
+    flex: 1,
     backgroundColor: '#6366f1',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 40,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#6366f1',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 8,
-      },
-      web: {
-        boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.3)',
-      },
-    }),
   },
   submitButtonText: {
-    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+    color: '#ffffff',
   },
 });
-
-export default CreateProjectModal

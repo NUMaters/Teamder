@@ -1,97 +1,42 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LogOut } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import ProfileContent from '@/components/ProfileContent';
 import EditProfileModal from '@/components/EditProfileModal';
+import type { Profile } from '../../components/ProfileCard';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [profileData, setProfileData] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
-
-  useEffect(() => {
-    fetchProfile();
-  }, []);
 
   const fetchProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace('/login');
-        return;
-      }
+      if (!user) throw new Error('ユーザーが見つかりません');
 
-      const { data: profile, error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single();
 
       if (error) throw error;
-
-      if (profile) {
-        setProfileData({
-          name: profile.name || '',
-          title: profile.title || '',
-          location: profile.location || '',
-          email: profile.email || '',
-          website: profile.website || '',
-          image: profile.image_url || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400',
-          coverUrl: profile.cover_url,
-          bio: profile.bio || '',
-          skills: profile.skills?.map((name: string) => ({ name, level: '中級' })) || [],
-          interests: profile.interests || [],
-          githubUsername: profile.github_username || '',
-          twitterUsername: profile.twitter_username || '',
-        });
-      }
+      setProfile(data);
     } catch (error) {
-      console.error('Profile fetch error:', error);
-      Alert.alert('エラー', 'プロフィールの取得に失敗しました');
+      console.error('プロフィール取得エラー:', error);
     }
   };
 
-  const handleProfileUpdate = async (updatedData: any) => {
-    try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        throw new Error('ユーザー情報が見つかりません');
-      }
+  useEffect(() => {
+    fetchProfile();
+  }, []);
 
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          name: updatedData.name,
-          title: updatedData.title,
-          location: updatedData.location,
-          website: updatedData.website,
-          image_url: updatedData.imageUrl,
-          cover_url: updatedData.coverUrl,
-          github_username: updatedData.githubUsername,
-          twitter_username: updatedData.twitterUsername,
-          interests: updatedData.interests,
-          skills: updatedData.skills.map((s: any) => s.name),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      await fetchProfile();
-      setIsEditModalVisible(false);
-    } catch (error) {
-      console.error('Profile update error:', error);
-      Alert.alert('エラー', 'プロフィールの更新に失敗しました');
-    } finally {
-      setLoading(false);
-    }
+  const handleProfileUpdate = () => {
+    fetchProfile(); // プロフィールを再取得
   };
 
   const handleLogout = async () => {
@@ -124,7 +69,7 @@ export default function ProfileScreen() {
     );
   };
 
-  if (!profileData) {
+  if (!profile) {
     return (
       <View style={styles.container}>
         <Text style={styles.loadingText}>読み込み中...</Text>
@@ -149,7 +94,7 @@ export default function ProfileScreen() {
 
       <ScrollView style={styles.content}>
         <ProfileContent 
-          profileData={profileData} 
+          profileData={profile} 
           isOwnProfile={true} 
           onEdit={() => setIsEditModalVisible(true)} 
         />
@@ -158,8 +103,21 @@ export default function ProfileScreen() {
       <EditProfileModal
         isVisible={isEditModalVisible}
         onClose={() => setIsEditModalVisible(false)}
-        onSubmit={handleProfileUpdate}
-        initialData={profileData}
+        onUpdate={handleProfileUpdate}
+        initialData={{
+          name: profile.name,
+          title: profile.title,
+          university: profile.university,
+          department: profile.department,
+          location: profile.location,
+          githubUsername: profile.github_username,
+          twitterUsername: profile.twitter_username,
+          bio: profile.bio,
+          imageUrl: profile.image_url,
+          coverUrl: profile.cover_url,
+          skills: profile.skills || [],
+          interests: profile.interests || [],
+        }}
       />
     </View>
   );

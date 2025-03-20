@@ -658,6 +658,7 @@ export default function DiscoverScreen() {
         onSubmit={(projectData) => {
           console.log('New project:', projectData);
           setIsCreateProjectModalVisible(false);
+          fetchProjects();
         }}
       />
     </View>

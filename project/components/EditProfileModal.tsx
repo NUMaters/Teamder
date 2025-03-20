@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal, View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, TextInput, Image, Alert, Linking } from 'react-native';
 import { X, Plus, ChevronDown, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '../lib/supabase';
 
 type ProfileFormData = {
   name: string;
@@ -21,7 +22,7 @@ type ProfileFormData = {
 interface EditProfileModalProps {
   isVisible: boolean;
   onClose: () => void;
-  onSubmit: (data: ProfileFormData) => void;
+  onUpdate: () => void;
   initialData: ProfileFormData;
 }
 
@@ -51,10 +52,10 @@ const EXPERIENCE_YEARS = [
   '1年未満', '1-2年', '2-3年', '3-5年', '5-7年', '7-10年', '10年以上'
 ];
 
-export default function EditProfileModal({ isVisible, onClose, onSubmit, initialData }: EditProfileModalProps) {
+export default function EditProfileModal({ isVisible, onClose, onUpdate, initialData }: EditProfileModalProps) {
   const [formData, setFormData] = useState<ProfileFormData>(initialData);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [showSkillsPicker, setShowSkillsPicker] = useState(false);
+  const [showSkillsDropdown, setShowSkillsDropdown] = useState(false);
   const [showInterestsPicker, setShowInterestsPicker] = useState(false);
   const [showExperiencePicker, setShowExperiencePicker] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
@@ -117,10 +118,17 @@ export default function EditProfileModal({ isVisible, onClose, onSubmit, initial
     }));
   };
 
-  const addSkill = (skillName: string, years: string) => {
+  const toggleSkill = (skill: string) => {
+    setSelectedSkill(skill);
+    setShowExperiencePicker(true);
+  };
+
+  const addSkillWithExperience = (skill: string, years: string) => {
     setFormData(prev => ({
       ...prev,
-      skills: [...prev.skills, { name: skillName, years }]
+      skills: prev.skills.some(s => s.name === skill)
+        ? prev.skills.map(s => s.name === skill ? { name: skill, years } : s)
+        : [...prev.skills, { name: skill, years }]
     }));
     setSelectedSkill(null);
     setShowExperiencePicker(false);
@@ -129,8 +137,42 @@ export default function EditProfileModal({ isVisible, onClose, onSubmit, initial
   const removeSkill = (skillName: string) => {
     setFormData(prev => ({
       ...prev,
-      skills: prev.skills.filter(skill => skill.name !== skillName)
+      skills: prev.skills.filter(s => s.name !== skillName)
     }));
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('ユーザーが見つかりません');
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          name: formData.name,
+          title: formData.title,
+          university: formData.university,
+          department: formData.department,
+          location: formData.location,
+          github_username: formData.githubUsername,
+          twitter_username: formData.twitterUsername,
+          bio: formData.bio,
+          image_url: formData.imageUrl,
+          cover_url: formData.coverUrl,
+          skills: formData.skills,
+          interests: formData.interests,
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      // プロフィール更新後に親コンポーネントに通知
+      onClose();
+      onUpdate(); // 親コンポーネントの更新関数を呼び出す
+    } catch (error) {
+      console.error('プロフィール更新エラー:', error);
+      Alert.alert('エラー', 'プロフィールの更新に失敗しました');
+    }
   };
 
   return (
@@ -249,28 +291,51 @@ export default function EditProfileModal({ isVisible, onClose, onSubmit, initial
               />
             </View>
 
-            <View style={styles.formGroup}>
+            <View style={styles.inputGroup}>
               <Text style={styles.label}>スキル</Text>
               <TouchableOpacity
-                style={styles.selectButton}
-                onPress={() => setShowSkillsPicker(true)}>
-                <Text style={styles.selectButtonText}>
-                  {formData.skills.length > 0
-                    ? `${formData.skills.length}個のスキルを選択中`
-                    : 'スキルを選択'}
+                style={styles.dropdownButton}
+                onPress={() => setShowSkillsDropdown(!showSkillsDropdown)}>
+                <Text style={styles.dropdownButtonText}>
+                  {formData.skills.length > 0 ? `${formData.skills.length}個選択中` : 'スキルを選択'}
                 </Text>
                 <ChevronDown size={20} color="#6b7280" />
               </TouchableOpacity>
+              {showSkillsDropdown && (
+                <View style={styles.skillsDropdownContent}>
+                  <ScrollView>
+                    <View style={styles.skillsGrid}>
+                      {SKILLS.map((skill) => (
+                        <TouchableOpacity
+                          key={`skill-${skill}`}
+                          style={[
+                            styles.skillButton,
+                            formData.skills.some(s => s.name === skill) && styles.skillButtonActive,
+                          ]}
+                          onPress={() => toggleSkill(skill)}>
+                          <Text
+                            style={[
+                              styles.skillButtonText,
+                              formData.skills.some(s => s.name === skill) && styles.skillButtonTextActive,
+                            ]}>
+                            {skill}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+              )}
               {formData.skills.length > 0 && (
-                <View style={styles.tagsContainer}>
+                <View style={styles.selectedSkillsContainer}>
                   {formData.skills.map((skill) => (
-                    <View key={skill.name} style={styles.tag}>
-                      <Text style={styles.tagText}>
+                    <View key={`selected-skill-${skill.name}`} style={styles.selectedSkillTag}>
+                      <Text style={styles.selectedSkillText}>
                         {skill.name} ({skill.years})
                       </Text>
                       <TouchableOpacity
                         onPress={() => removeSkill(skill.name)}
-                        style={styles.tagRemoveButton}>
+                        style={styles.selectedSkillRemoveButton}>
                         <X size={12} color="#6366f1" />
                       </TouchableOpacity>
                     </View>
@@ -294,7 +359,7 @@ export default function EditProfileModal({ isVisible, onClose, onSubmit, initial
               {formData.interests.length > 0 && (
                 <View style={styles.tagsContainer}>
                   {formData.interests.map((interest) => (
-                    <View key={interest} style={styles.tag}>
+                    <View key={`interest-tag-${interest}`} style={styles.tag}>
                       <Text style={styles.tagText}>{interest}</Text>
                       <TouchableOpacity
                         onPress={() => toggleInterest(interest)}
@@ -309,10 +374,7 @@ export default function EditProfileModal({ isVisible, onClose, onSubmit, initial
 
             <TouchableOpacity
               style={styles.submitButton}
-              onPress={() => {
-                onSubmit(formData);
-                onClose();
-              }}>
+              onPress={handleSubmit}>
               <Text style={styles.submitButtonText}>保存</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -336,7 +398,7 @@ export default function EditProfileModal({ isVisible, onClose, onSubmit, initial
                 <ScrollView style={styles.pickerModalList}>
                   {PREFECTURES.map((prefecture) => (
                     <TouchableOpacity
-                      key={prefecture}
+                      key={`prefecture-${prefecture}`}
                       style={styles.pickerModalItem}
                       onPress={() => {
                         setFormData(prev => ({ ...prev, location: prefecture }));
@@ -348,45 +410,6 @@ export default function EditProfileModal({ isVisible, onClose, onSubmit, initial
                       ]}>
                         {prefecture}
                       </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            </View>
-          </Modal>
-
-          {/* Skills Picker Modal */}
-          <Modal
-            visible={showSkillsPicker}
-            animationType="slide"
-            transparent={true}
-            onRequestClose={() => {
-              setShowSkillsPicker(false);
-              setSelectedSkill(null);
-            }}>
-            <View style={styles.pickerModalContainer}>
-              <View style={styles.pickerModalContent}>
-                <View style={styles.pickerModalHeader}>
-                  <Text style={styles.pickerModalTitle}>スキルを選択</Text>
-                  <TouchableOpacity
-                    style={styles.pickerModalCloseButton}
-                    onPress={() => {
-                      setShowSkillsPicker(false);
-                      setSelectedSkill(null);
-                    }}>
-                    <X size={24} color="#6b7280" />
-                  </TouchableOpacity>
-                </View>
-                <ScrollView style={styles.pickerModalList}>
-                  {SKILLS.filter(skill => !formData.skills.some(s => s.name === skill)).map((skill) => (
-                    <TouchableOpacity
-                      key={skill}
-                      style={styles.pickerModalItem}
-                      onPress={() => {
-                        setSelectedSkill(skill);
-                        setShowExperiencePicker(true);
-                      }}>
-                      <Text style={styles.pickerModalItemText}>{skill}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -406,7 +429,9 @@ export default function EditProfileModal({ isVisible, onClose, onSubmit, initial
             <View style={styles.pickerModalContainer}>
               <View style={styles.pickerModalContent}>
                 <View style={styles.pickerModalHeader}>
-                  <Text style={styles.pickerModalTitle}>経験年数を選択</Text>
+                  <Text style={styles.pickerModalTitle}>
+                    {selectedSkill}の経験年数を選択
+                  </Text>
                   <TouchableOpacity
                     style={styles.pickerModalCloseButton}
                     onPress={() => {
@@ -419,11 +444,11 @@ export default function EditProfileModal({ isVisible, onClose, onSubmit, initial
                 <ScrollView style={styles.pickerModalList}>
                   {EXPERIENCE_YEARS.map((years) => (
                     <TouchableOpacity
-                      key={years}
+                      key={`experience-${years}`}
                       style={styles.pickerModalItem}
                       onPress={() => {
                         if (selectedSkill) {
-                          addSkill(selectedSkill, years);
+                          addSkillWithExperience(selectedSkill, years);
                         }
                       }}>
                       <Text style={styles.pickerModalItemText}>{years}</Text>
@@ -453,7 +478,7 @@ export default function EditProfileModal({ isVisible, onClose, onSubmit, initial
                 <ScrollView style={styles.pickerModalList}>
                   {INTERESTS.map((interest) => (
                     <TouchableOpacity
-                      key={interest}
+                      key={`interest-${interest}`}
                       style={[
                         styles.pickerModalItem,
                         formData.interests.includes(interest) && styles.pickerModalItemSelected
@@ -713,5 +738,84 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+  },
+  dropdownButtonText: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  skillsDropdownContent: {
+    marginTop: 4,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    maxHeight: 300,
+    zIndex: 1000,
+  },
+  skillsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    padding: 12,
+  },
+  skillButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  skillButtonActive: {
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+  },
+  skillButtonText: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  skillButtonTextActive: {
+    color: '#ffffff',
+  },
+  selectedSkillsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  selectedSkillTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e0e7ff',
+    paddingVertical: 6,
+    paddingLeft: 12,
+    paddingRight: 8,
+    borderRadius: 16,
+    gap: 4,
+  },
+  selectedSkillText: {
+    fontSize: 14,
+    color: '#4f46e5',
+  },
+  selectedSkillRemoveButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#c7d2fe',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
