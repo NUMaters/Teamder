@@ -19,17 +19,21 @@ export type Profile = {
 };
 
 interface ProfileCardProps {
-  profile: Profile;
-  onEdit: () => void;
+  profile?: Profile;
+  profileData?: Profile;
+  onEdit?: () => void;
 }
 
-export default function ProfileCard({ profile, onEdit }: ProfileCardProps) {
+export default function ProfileCard({ profile, profileData, onEdit }: ProfileCardProps) {
+  const displayProfile = profile || profileData;
+  if (!displayProfile) return null;
+
   return (
     <View style={styles.container}>
       <View style={styles.coverImageContainer}>
-        {profile.cover_url ? (
+        {displayProfile.cover_url ? (
           <Image 
-            source={{ uri: profile.cover_url }} 
+            source={{ uri: displayProfile.cover_url }} 
             style={styles.coverImage}
             resizeMode="cover"
           />
@@ -41,9 +45,9 @@ export default function ProfileCard({ profile, onEdit }: ProfileCardProps) {
       <View style={styles.content}>
         <View style={styles.profileHeader}>
           <View style={styles.profileImageContainer}>
-            {profile.image_url ? (
+            {displayProfile.image_url ? (
               <Image 
-                source={{ uri: profile.image_url }} 
+                source={{ uri: displayProfile.image_url }} 
                 style={styles.profileImage}
                 resizeMode="cover"
               />
@@ -52,12 +56,14 @@ export default function ProfileCard({ profile, onEdit }: ProfileCardProps) {
             )}
           </View>
           <View style={styles.profileInfo}>
-            <Text style={styles.name}>{profile.name}</Text>
-            <Text style={styles.title}>{profile.title}</Text>
-            <TouchableOpacity style={styles.editButton} onPress={onEdit}>
-              <Edit2 size={16} color="#6b7280" />
-              <Text style={styles.editButtonText}>プロフィールを編集</Text>
-            </TouchableOpacity>
+            <Text style={styles.name}>{displayProfile.name}</Text>
+            <Text style={styles.title}>{displayProfile.title}</Text>
+            {onEdit && (
+              <TouchableOpacity style={styles.editButton} onPress={onEdit}>
+                <Edit2 size={16} color="#6b7280" />
+                <Text style={styles.editButtonText}>プロフィールを編集</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -65,7 +71,7 @@ export default function ProfileCard({ profile, onEdit }: ProfileCardProps) {
           <Text style={styles.sectionTitle}>学歴</Text>
           <View style={styles.educationContainer}>
             <Text style={styles.educationText}>
-              {profile.university} {profile.department}
+              {displayProfile.university} {displayProfile.department}
             </Text>
           </View>
         </View>
@@ -73,8 +79,8 @@ export default function ProfileCard({ profile, onEdit }: ProfileCardProps) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>スキル</Text>
           <View style={styles.skillsContainer}>
-            {profile.skills && profile.skills.length > 0 ? (
-              profile.skills.map((skill, index) => (
+            {displayProfile.skills && displayProfile.skills.length > 0 ? (
+              displayProfile.skills.map((skill, index) => (
                 <View key={index} style={styles.skillTag}>
                   <Text style={styles.skillText}>
                     {skill.name} ({skill.years})
@@ -90,8 +96,8 @@ export default function ProfileCard({ profile, onEdit }: ProfileCardProps) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>興味のある分野</Text>
           <View style={styles.interestsContainer}>
-            {profile.interests && profile.interests.length > 0 ? (
-              profile.interests.map((interest, index) => (
+            {displayProfile.interests && displayProfile.interests.length > 0 ? (
+              displayProfile.interests.map((interest, index) => (
                 <View key={index} style={styles.interestTag}>
                   <Text style={styles.interestText}>{interest}</Text>
                 </View>
@@ -104,22 +110,22 @@ export default function ProfileCard({ profile, onEdit }: ProfileCardProps) {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>自己紹介</Text>
-          <Text style={styles.bio}>{profile.bio || '自己紹介が設定されていません'}</Text>
+          <Text style={styles.bio}>{displayProfile.bio || '自己紹介が設定されていません'}</Text>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>SNS</Text>
           <View style={styles.socialLinks}>
-            {profile.github_username ? (
+            {displayProfile.github_username ? (
               <TouchableOpacity style={styles.socialLink}>
-                <Text style={styles.socialLinkText}>GitHub: @{profile.github_username}</Text>
+                <Text style={styles.socialLinkText}>GitHub: @{displayProfile.github_username}</Text>
               </TouchableOpacity>
             ) : (
               <Text style={styles.emptyText}>GitHubアカウントが設定されていません</Text>
             )}
-            {profile.twitter_username ? (
+            {displayProfile.twitter_username ? (
               <TouchableOpacity style={styles.socialLink}>
-                <Text style={styles.socialLinkText}>Twitter: @{profile.twitter_username}</Text>
+                <Text style={styles.socialLinkText}>Twitter: @{displayProfile.twitter_username}</Text>
               </TouchableOpacity>
             ) : (
               <Text style={styles.emptyText}>Twitterアカウントが設定されていません</Text>

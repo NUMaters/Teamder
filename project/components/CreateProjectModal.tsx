@@ -110,13 +110,17 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
         }
 
         // 画像をアップロード
+        const response = await fetch(file.uri);
+        const blob = await response.blob();
+
+        // ユーザーIDを取得
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('ユーザーが見つかりません');
+
         const { error: uploadError } = await supabase.storage
           .from('project-images')
-          .upload(filePath, {
-            uri: file.uri,
-            type: `image/${fileExt}`,
-            name: fileName,
-          }, {
+          .upload(`${user.id}/${filePath}`, blob, {
+            contentType: `image/${fileExt}`,
             cacheControl: '3600',
             upsert: false,
           });
@@ -125,7 +129,7 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
 
         const { data: { publicUrl } } = supabase.storage
           .from('project-images')
-          .getPublicUrl(filePath);
+          .getPublicUrl(`${user.id}/${filePath}`);
 
         setFormData(prev => ({ ...prev, image_url: publicUrl }));
       }

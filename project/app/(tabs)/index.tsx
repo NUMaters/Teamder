@@ -337,12 +337,34 @@ export default function DiscoverScreen() {
           </Text>
 
           <View style={styles.skillsContainer}>
-            {profile.skills.map((skill, index) => (
-              <View key={index} style={styles.skillBadge}>
-                <Text style={styles.skillText}>{skill}</Text>
-              </View>
-            ))}
+            {profile.skills.map((skill, index) => {
+              let skillData;
+              try {
+                skillData = typeof skill === 'string' ? JSON.parse(skill) : skill;
+              } catch (e) {
+                skillData = { name: skill, years: '未設定' };
+              }
+              return (
+                <View key={index} style={styles.skillBadge}>
+                  <Text style={styles.skillText}>{skillData.name}</Text>
+                  <Text style={styles.skillYearsText}>{skillData.years}</Text>
+                </View>
+              );
+            })}
           </View>
+
+          {profile.interests && profile.interests.length > 0 && (
+            <View style={styles.interestsContainer}>
+              <Text style={styles.interestsTitle}>興味のある分野</Text>
+              <View style={styles.interestsList}>
+                {profile.interests.map((interest, index) => (
+                  <View key={index} style={styles.interestBadge}>
+                    <Text style={styles.interestText}>{interest}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
       </View>
     );
@@ -864,11 +886,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(99, 102, 241, 0.2)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   skillText: {
     fontSize: 11,
     color: '#4f46e5',
     fontWeight: '500',
+  },
+  skillYearsText: {
+    fontSize: 10,
+    color: '#6b7280',
   },
   bottomButtons: {
     position: 'absolute',
@@ -948,6 +977,33 @@ const styles = StyleSheet.create({
   likeIndicatorText: {
     color: '#ffffff',
     fontSize: 12,
+    fontWeight: '500',
+  },
+  interestsContainer: {
+    marginTop: 12,
+  },
+  interestsTitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  interestsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  interestBadge: {
+    backgroundColor: 'rgba(243, 244, 246, 0.8)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(107, 114, 128, 0.2)',
+  },
+  interestText: {
+    fontSize: 11,
+    color: '#4b5563',
     fontWeight: '500',
   },
 });

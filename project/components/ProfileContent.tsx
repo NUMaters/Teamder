@@ -97,9 +97,17 @@ export default function ProfileContent({ profileData, isOwnProfile, onEdit }: Pr
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         {profileData.coverUrl && (
-          <Image source={{ uri: profileData.coverUrl }} style={styles.coverImage} />
+          <Image 
+            source={{ uri: profileData.coverUrl }} 
+            style={styles.coverImage}
+            resizeMode="cover"
+          />
         )}
-        <Image source={{ uri: profileData.image }} style={styles.profileImage} />
+        <Image 
+          source={{ uri: profileData.image }} 
+          style={styles.profileImage}
+          resizeMode="cover"
+        />
         
         {isOwnProfile && onEdit && (
           <View style={[styles.editButtonContainer, Platform.OS === 'ios' ? { top: 80 } : { top: 40 }]}>
@@ -205,74 +213,30 @@ export default function ProfileContent({ profileData, isOwnProfile, onEdit }: Pr
         {renderSectionHeader('スキル')}
         {profileData.skills && profileData.skills.length > 0 ? (
           <View style={styles.skillsGrid}>
-            {profileData.skills.map((skill, index) => (
-              <View key={index} style={styles.skillItem}>
-                <View style={styles.skillHeader}>
-                  <Code2 size={16} color="#6366f1" />
-                  <Text style={styles.skillName}>{skill.name}</Text>
+            {profileData.skills.map((skill, index) => {
+              let skillData;
+              try {
+                skillData = typeof skill === 'string' ? JSON.parse(skill) : skill;
+              } catch (e) {
+                skillData = { name: skill, years: '未設定' };
+              }
+              return (
+                <View key={index} style={styles.skillItem}>
+                  <View style={styles.skillHeader}>
+                    <Code2 size={16} color="#6366f1" />
+                    <Text style={styles.skillName}>{skillData.name}</Text>
+                  </View>
+                  <Text style={styles.skillYears}>
+                    経験年数: {skillData.years}
+                  </Text>
                 </View>
-                <Text style={[styles.skillLevel, { color: getSkillLevelColor(skill.level) }]}>
-                  {skill.level}
-                </Text>
-              </View>
-            ))}
+              );
+            })}
           </View>
         ) : (
           <Text style={styles.text}>スキルが登録されていません。</Text>
         )}
       </View>
-
-      {/* 以下、他のセクションは元の条件分岐のまま */}
-      {profileData.languages && profileData.languages.length > 0 && (
-        <View style={styles.section}>
-          {renderSectionHeader('言語')}
-          <View style={styles.languagesContainer}>
-            {profileData.languages.map((language, index) => (
-              <View key={index} style={styles.languageItem}>
-                <Languages size={16} color="#6366f1" />
-                <Text style={styles.languageName}>{language.name}</Text>
-                <Text style={styles.languageLevel}>{language.level}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {profileData.achievements && (
-        <View style={styles.section}>
-          {renderSectionHeader('実績')}
-          <View style={styles.achievementsGrid}>
-            {profileData.achievements.githubContributions !== undefined && (
-              <View style={styles.achievementItem}>
-                <Github size={20} color="#6366f1" />
-                <Text style={styles.achievementValue}>{profileData.achievements.githubContributions}</Text>
-                <Text style={styles.achievementLabel}>Contributions</Text>
-              </View>
-            )}
-            {profileData.achievements.projectsCompleted !== undefined && (
-              <View style={styles.achievementItem}>
-                <Code2 size={20} color="#6366f1" />
-                <Text style={styles.achievementValue}>{profileData.achievements.projectsCompleted}</Text>
-                <Text style={styles.achievementLabel}>Projects</Text>
-              </View>
-            )}
-            {profileData.achievements.hackathonsWon !== undefined && (
-              <View style={styles.achievementItem}>
-                <Award size={20} color="#6366f1" />
-                <Text style={styles.achievementValue}>{profileData.achievements.hackathonsWon}</Text>
-                <Text style={styles.achievementLabel}>Hackathons</Text>
-              </View>
-            )}
-            {profileData.achievements.papers !== undefined && (
-              <View style={styles.achievementItem}>
-                <BookOpen size={20} color="#6366f1" />
-                <Text style={styles.achievementValue}>{profileData.achievements.papers}</Text>
-                <Text style={styles.achievementLabel}>Papers</Text>
-              </View>
-            )}
-          </View>
-        </View>
-      )}
 
       {profileData.activities && profileData.activities.length > 0 && (
         <View style={styles.section}>
@@ -287,20 +251,6 @@ export default function ProfileContent({ profileData, isOwnProfile, onEdit }: Pr
                 <Text style={styles.activityOrg}>{activity.organization}</Text>
                 <Text style={styles.activityPeriod}>{activity.period}</Text>
                 <Text style={styles.activityDescription}>{activity.description}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {profileData.coursework && profileData.coursework.length > 0 && (
-        <View style={styles.section}>
-          {renderSectionHeader('履修科目')}
-          <View style={styles.courseworkContainer}>
-            {profileData.coursework.map((course, index) => (
-              <View key={index} style={styles.courseItem}>
-                <BookOpen size={16} color="#6366f1" />
-                <Text style={styles.courseText}>{course}</Text>
               </View>
             ))}
           </View>
@@ -487,54 +437,9 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#1f2937',
   },
-  skillLevel: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  languagesContainer: {
-    gap: 12,
-  },
-  languageItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#f9fafb',
-    padding: 12,
-    borderRadius: 12,
-  },
-  languageName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1f2937',
-    flex: 1,
-  },
-  languageLevel: {
-    fontSize: 14,
-    color: '#6366f1',
-    fontWeight: '500',
-  },
-  achievementsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  achievementItem: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    width: '48%',
-  },
-  achievementValue: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginTop: 8,
-  },
-  achievementLabel: {
+  skillYears: {
     fontSize: 12,
     color: '#6b7280',
-    marginTop: 4,
   },
   activitiesContainer: {
     gap: 16,
@@ -569,21 +474,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4b5563',
     lineHeight: 20,
-  },
-  courseworkContainer: {
-    gap: 12,
-  },
-  courseItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#f9fafb',
-    padding: 12,
-    borderRadius: 12,
-  },
-  courseText: {
-    fontSize: 14,
-    color: '#1f2937',
   },
   certificationsContainer: {
     gap: 12,
