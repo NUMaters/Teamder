@@ -33,8 +33,8 @@ const DUMMY_DEVELOPERS = [
     education: '東京工科大学 情報工学科',
     company: 'テックスタートアップ株式会社',
     likes: [
-      { userId: 'user-2', type: 'superlike' },
-      { userId: CURRENT_USER_ID, type: 'like' },
+      { userId: 'user-2', type: 'superlike' as LikeType },
+      { userId: CURRENT_USER_ID, type: 'like' as LikeType },
     ],
   },
   {
