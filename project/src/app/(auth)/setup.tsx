@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Image, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Image, ScrollView, Alert, KeyboardAvoidingView, Modal } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { User, Mail, Lock, Camera } from 'lucide-react-native';
+import { Camera, Upload, X, ChevronDown, Code2 } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import * as FileSystem from 'expo-file-system';
 
@@ -15,14 +16,118 @@ if (!API_GATEWAY_URL || !API_KEY || !AUTH_TOKEN) {
   throw new Error('必要な環境変数が設定されていません。');
 }
 
+// スキルの選択肢
+const SKILLS = [
+  { id: 'javascript', label: 'JavaScript' },
+  { id: 'typescript', label: 'TypeScript' },
+  { id: 'python', label: 'Python' },
+  { id: 'java', label: 'Java' },
+  { id: 'csharp', label: 'C#' },
+  { id: 'go', label: 'Go' },
+  { id: 'rust', label: 'Rust' },
+  { id: 'c', label: 'C' },
+  { id: 'cpp', label: 'C++' },
+  { id: 'php', label: 'PHP' },
+  { id: 'ruby', label: 'Ruby' },
+  { id: 'swift', label: 'Swift' },
+  { id: 'kotlin', label: 'Kotlin' },
+  { id: 'react', label: 'React' },
+  { id: 'vue', label: 'Vue.js' },
+  { id: 'angular', label: 'Angular' },
+  { id: 'svelte', label: 'Svelte' },
+  { id: 'nextjs', label: 'Next.js' },
+  { id: 'nuxtjs', label: 'Nuxt.js' },
+  { id: 'nodejs', label: 'Node.js' },
+  { id: 'django', label: 'Django' },
+  { id: 'flask', label: 'Flask' },
+  { id: 'spring', label: 'Spring Boot' },
+  { id: 'rails', label: 'Ruby on Rails' },
+  { id: 'laravel', label: 'Laravel' },
+  { id: 'express', label: 'Express.js' },
+  { id: 'fastapi', label: 'FastAPI' },
+  { id: 'graphql', label: 'GraphQL' },
+  { id: 'docker', label: 'Docker' },
+  { id: 'kubernetes', label: 'Kubernetes' },
+  { id: 'aws', label: 'AWS' },
+  { id: 'gcp', label: 'Google Cloud' },
+  { id: 'azure', label: 'Azure' },
+];
+
+// 経験年数の選択肢
+const EXPERIENCE_YEARS = [
+  '半年未満',
+  '1年未満',
+  '1-2年',
+  '2-3年',
+  '3-5年',
+  '5-7年',
+  '7-10年',
+  '10年以上'
+];
+
+// 興味のある分野の選択肢
+const INTERESTS = [
+  { id: 'web', label: 'Web開発' },
+  { id: 'mobile', label: 'モバイル開発' },
+  { id: 'ai', label: 'AI/機械学習' },
+  { id: 'blockchain', label: 'ブロックチェーン' },
+  { id: 'game', label: 'ゲーム開発' },
+  { id: 'iot', label: 'IoT' },
+  { id: 'security', label: 'セキュリティ' },
+  { id: 'cloud', label: 'クラウド' },
+];
+
+const prefectures = [
+  '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
+  '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県',
+  '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県', '岐阜県',
+  '静岡県', '愛知県', '三重県', '滋賀県', '京都府', '大阪府', '兵庫県',
+  '奈良県', '和歌山県', '鳥取県', '島根県', '岡山県', '広島県', '山口県',
+  '徳島県', '香川県', '愛媛県', '高知県', '福岡県', '佐賀県', '長崎県',
+  '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県'
+] as const;
+
+// 年齢の選択肢
+const AGES = Array.from({ length: 11 }, (_, i) => (i + 15).toString());
+
 export default function SetupScreen() {
   const router = useRouter();
-  const { token } = useLocalSearchParams<{ token: string }>();
-  const [username, setUsername] = useState('');
-  const [bio, setBio] = useState('');
+  const { token } = useLocalSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [focusedInput, setFocusedInput] = useState<'username' | 'bio' | null>(null);
+  const [focusedInput, setFocusedInput] = useState<string | null>(null);
+
+  // フォームの状態
+  const [formData, setFormData] = useState({
+    username: '',
+    school: '',
+    age: '',
+    location: '',
+    bio: '',
+    skills: [] as Array<{ id: string; years: string }>,
+    interests: [] as string[],
+  });
+
+  // 画像の状態とデフォルト画像のURIを定義
+  const defaultImages = {
+    icon: require('../../../assets/images/default-icon.png'),
+    cover: require('../../../assets/images/default-cover.png'),
+  };
+
+  const [images, setImages] = useState({
+    icon: defaultImages.icon,
+    cover: defaultImages.cover,
+  });
+
+  // スキル選択のモーダル状態
+  const [showExperiencePicker, setShowExperiencePicker] = useState(false);
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
+
+  // 場所選択のモーダル状態
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+
+  // 年齢選択のモーダル状態
+  const [showAgePicker, setShowAgePicker] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -30,39 +135,150 @@ export default function SetupScreen() {
     }
   }, [token]);
 
-  const handleSetup = async () => {
-    if (!username) {
-      setError('ユーザー名を入力してください。');
-      return;
-    }
+  const pickImage = async (type: 'icon' | 'cover') => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: type === 'icon' ? [1, 1] : [16, 9],
+        quality: 0.8,
+      });
 
-    setLoading(true);
-    setError(null);
+      if (!result.canceled) {
+        const selectedImage = result.assets[0];
+        setImages(prev => ({
+          ...prev,
+          [type]: { uri: selectedImage.uri }
+        }));
+      }
+    } catch (error) {
+      console.error('画像の選択に失敗しました:', error);
+      Alert.alert('エラー', '画像の選択に失敗しました。');
+    }
+  };
+
+  const removeImage = (type: 'icon' | 'cover') => {
+    setImages(prev => ({
+      ...prev,
+      [type]: defaultImages[type]
+    }));
+  };
+
+  const addSkillWithExperience = (skill: string, years: string) => {
+    setFormData(prev => ({
+      ...prev,
+      skills: prev.skills.some(s => s.id === skill)
+        ? prev.skills.map(s => s.id === skill ? { id: skill, years } : s)
+        : [...prev.skills, { id: skill, years }]
+    }));
+    setSelectedSkill(null);
+    setShowExperiencePicker(false);
+  };
+
+  const removeSkill = (skillId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      skills: prev.skills.filter(s => s.id !== skillId)
+    }));
+  };
+
+  const handleInterestToggle = (interestId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      interests: prev.interests.includes(interestId)
+        ? prev.interests.filter(id => id !== interestId)
+        : [...prev.interests, interestId]
+    }));
+  };
+
+  const validateForm = () => {
+    if (!formData.username.trim()) {
+      setError('ユーザー名を入力してください');
+      return false;
+    }
+    if (!formData.school.trim()) {
+      setError('学校名を入力してください');
+      return false;
+    }
+    if (!formData.age.trim()) {
+      setError('年齢を入力してください');
+      return false;
+    }
+    if (!formData.location.trim()) {
+      setError('場所を入力してください');
+      return false;
+    }
+    if (!formData.bio.trim()) {
+      setError('自己紹介を入力してください');
+      return false;
+    }
+    if (formData.skills.length === 0) {
+      setError('スキルを1つ以上選択してください');
+      return false;
+    }
+    if (formData.interests.length === 0) {
+      setError('興味のある分野を1つ以上選択してください');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSetup = async () => {
+    if (!validateForm()) return;
 
     try {
-      const response = await axios.post(
-        `${API_GATEWAY_URL}/profile/setup`,
+      setLoading(true);
+      setError(null);
+
+      // 画像のアップロード処理
+      let iconUrl = null;
+      let coverUrl = null;
+
+      if (images.icon) {
+        const iconFormData = new FormData();
+        iconFormData.append('file', {
+          uri: images.icon.uri,
+          type: 'image/jpeg',
+          name: 'icon.jpg',
+        } as any);
+        // アイコン画像のアップロード処理
+      }
+
+      if (images.cover) {
+        const coverFormData = new FormData();
+        coverFormData.append('file', {
+          uri: images.cover.uri,
+          type: 'image/jpeg',
+          name: 'cover.jpg',
+        } as any);
+        // カバー画像のアップロード処理
+      }
+
+      // API Gatewayにリクエストを送信
+      const apiResponse = await axios.post(
+        `${API_GATEWAY_URL}/set_profile`,
         {
-          username,
-          bio
+          ...formData,
+          icon_url: iconUrl,
+          cover_url: coverUrl,
         },
         {
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': API_KEY,
             'Authorization': `Bearer ${token}`
           }
         }
       );
 
-      if (response.data.success) {
-        // プロフィール設定成功後、メイン画面に遷移
+      if (apiResponse.data.success) {
         router.replace('/(tabs)');
+      } else {
+        throw new Error(apiResponse.data.message || 'プロフィールの設定に失敗しました');
       }
     } catch (error) {
-      console.error('Profile setup error:', error);
+      console.error('Setup error:', error);
       if (axios.isAxiosError(error)) {
-        const errorMessage = error.response?.data?.message || 'プロフィールの設定に失敗しました。';
+        const errorMessage = error.response?.data?.message || 'プロフィールの設定に失敗しました';
         setError(errorMessage);
       } else {
         setError('予期せぬエラーが発生しました。もう一度お試しください。');
@@ -73,66 +289,336 @@ export default function SetupScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>プロフィール設定</Text>
-        <Text style={styles.subtitle}>あなたのプロフィールを設定しましょう</Text>
+        <Text style={styles.headerTitle}>プロフィール設定</Text>
+        <Text style={styles.headerSubtitle}>
+          あなたの情報を入力して、プロジェクトに参加しましょう
+        </Text>
       </View>
 
-      <View style={styles.form}>
-        <View style={styles.inputContainer}>
-          <View style={styles.iconContainer}>
-            <User size={20} color="#666" />
+      <ScrollView 
+        style={styles.form}
+        keyboardShouldPersistTaps="handled">
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
           </View>
+        )}
+
+        <View style={styles.coverImageContainer}>
+          <Image 
+            source={typeof images.cover === 'string' ? { uri: images.cover } : images.cover}
+            style={styles.coverImage}
+            resizeMode="cover"
+          />
+          <TouchableOpacity 
+            style={styles.coverImageButton} 
+            onPress={() => pickImage('cover')}>
+            <Camera size={20} color="#fff" />
+            <Text style={styles.imageButtonText}>
+              {images.cover === defaultImages.cover ? 'カバー画像を選択' : 'カバー画像を変更'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.profileImageContainer}>
+          <Image 
+            source={typeof images.icon === 'string' ? { uri: images.icon } : images.icon}
+            style={styles.profileImage}
+            resizeMode="cover"
+          />
+          <TouchableOpacity 
+            style={styles.profileImageButton} 
+            onPress={() => pickImage('icon')}>
+            <Camera size={20} color="#fff" />
+            <Text style={styles.imageButtonText}>
+              {images.icon === defaultImages.icon ? 'プロフィール画像を選択' : 'プロフィール画像を変更'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>ユーザー名 <Text style={styles.required}>*</Text></Text>
           <TextInput
             style={[
               styles.input,
               focusedInput === 'username' && styles.inputFocused
             ]}
-            placeholder="ユーザー名"
-            value={username}
-            onChangeText={setUsername}
+            value={formData.username}
+            onChangeText={(text) => setFormData(prev => ({ ...prev, username: text }))}
             onFocus={() => setFocusedInput('username')}
             onBlur={() => setFocusedInput(null)}
+            placeholder="ユーザー名を入力"
             autoCapitalize="none"
-            autoCorrect={false}
           />
         </View>
 
-        <View style={styles.inputContainer}>
-          <View style={styles.iconContainer}>
-            <Mail size={20} color="#666" />
-          </View>
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>学校名 <Text style={styles.required}>*</Text></Text>
           <TextInput
             style={[
               styles.input,
+              focusedInput === 'school' && styles.inputFocused
+            ]}
+            value={formData.school}
+            onChangeText={(text) => setFormData(prev => ({ ...prev, school: text }))}
+            onFocus={() => setFocusedInput('school')}
+            onBlur={() => setFocusedInput(null)}
+            placeholder="学校名を入力"
+          />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>年齢 <Text style={styles.required}>*</Text></Text>
+          <TouchableOpacity
+            style={styles.ageButton}
+            onPress={() => setShowAgePicker(true)}>
+            <Text style={[
+              styles.ageButtonText,
+              !formData.age && styles.ageButtonPlaceholder
+            ]}>
+              {formData.age ? `${formData.age}歳` : '年齢を選択してください'}
+            </Text>
+            <ChevronDown size={20} color="#6b7280" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>都道府県 <Text style={styles.required}>*</Text></Text>
+          <TouchableOpacity
+            style={styles.locationButton}
+            onPress={() => setShowLocationPicker(true)}>
+            <Text style={[
+              styles.locationButtonText,
+              !formData.location && styles.locationButtonPlaceholder
+            ]}>
+              {formData.location || '都道府県を選択してください'}
+            </Text>
+            <ChevronDown size={20} color="#6b7280" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>自己紹介</Text>
+          <TextInput
+            style={[
+              styles.textArea,
               focusedInput === 'bio' && styles.inputFocused
             ]}
-            placeholder="自己紹介（任意）"
-            value={bio}
-            onChangeText={setBio}
+            value={formData.bio}
+            onChangeText={(text) => setFormData(prev => ({ ...prev, bio: text }))}
             onFocus={() => setFocusedInput('bio')}
             onBlur={() => setFocusedInput(null)}
+            placeholder="自己紹介を入力"
             multiline
             numberOfLines={4}
           />
         </View>
 
-        {error && (
-          <Text style={styles.errorText}>{error}</Text>
-        )}
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>スキル</Text>
+          <TouchableOpacity
+            style={styles.dropdownButton}
+            onPress={() => setShowExperiencePicker(true)}>
+            <Text style={styles.dropdownButtonText}>
+              {formData.skills.length > 0 ? `${formData.skills.length}個のスキルを選択中` : 'スキルを選択'}
+            </Text>
+            <ChevronDown size={20} color="#6b7280" />
+          </TouchableOpacity>
+          {formData.skills.length > 0 && (
+            <View style={styles.selectedSkillsContainer}>
+              {formData.skills.map((skill) => (
+                <View key={skill.id} style={styles.skillItem}>
+                  <View style={styles.skillHeader}>
+                    <Code2 size={16} color="#6366f1" />
+                    <Text style={styles.skillName}>
+                      {SKILLS.find(s => s.id === skill.id)?.label}
+                    </Text>
+                  </View>
+                  <Text style={styles.skillYears}>
+                    経験年数: {skill.years}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => removeSkill(skill.id)}
+                    style={styles.removeSkillButton}>
+                    <X size={16} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>興味のある分野</Text>
+          <View style={styles.interestsContainer}>
+            {INTERESTS.map((interest) => (
+              <TouchableOpacity
+                key={interest.id}
+                style={[
+                  styles.interestButton,
+                  formData.interests.includes(interest.id) && styles.interestButtonSelected
+                ]}
+                onPress={() => handleInterestToggle(interest.id)}>
+                <Text style={[
+                  styles.interestButtonText,
+                  formData.interests.includes(interest.id) && styles.interestButtonTextSelected
+                ]}>
+                  {interest.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
 
         <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
+          style={[styles.submitButton, loading && styles.buttonDisabled]}
           onPress={handleSetup}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
+          disabled={loading}>
+          <Text style={styles.submitButtonText}>
             {loading ? '設定中...' : 'プロフィールを設定'}
           </Text>
         </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
+
+      {/* Experience Picker Modal */}
+      <Modal
+        visible={showExperiencePicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setShowExperiencePicker(false);
+          setSelectedSkill(null);
+        }}>
+        <View style={styles.pickerModalContainer}>
+          <View style={styles.pickerModalContent}>
+            <View style={styles.pickerModalHeader}>
+              <Text style={styles.pickerModalTitle}>
+                {selectedSkill 
+                  ? `${SKILLS.find(s => s.id === selectedSkill)?.label}の経験年数を選択`
+                  : 'スキルを選択'}
+              </Text>
+              <TouchableOpacity
+                style={styles.pickerModalCloseButton}
+                onPress={() => {
+                  setShowExperiencePicker(false);
+                  setSelectedSkill(null);
+                }}>
+                <X size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.pickerModalList}>
+              {!selectedSkill ? (
+                SKILLS.map((skill) => (
+                  <TouchableOpacity
+                    key={skill.id}
+                    style={styles.pickerModalItem}
+                    onPress={() => setSelectedSkill(skill.id)}>
+                    <Text style={styles.pickerModalItemText}>{skill.label}</Text>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                EXPERIENCE_YEARS.map((years) => (
+                  <TouchableOpacity
+                    key={years}
+                    style={styles.pickerModalItem}
+                    onPress={() => {
+                      if (selectedSkill) {
+                        addSkillWithExperience(selectedSkill, years);
+                      }
+                    }}>
+                    <Text style={styles.pickerModalItemText}>{years}</Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Location Picker Modal */}
+      <Modal
+        visible={showLocationPicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowLocationPicker(false)}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>都道府県を選択</Text>
+              <TouchableOpacity onPress={() => setShowLocationPicker(false)}>
+                <X size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.prefectureList}>
+              {prefectures.map((prefecture: string) => (
+                <TouchableOpacity
+                  key={prefecture}
+                  style={[
+                    styles.prefectureItem,
+                    formData.location === prefecture && styles.prefectureItemActive
+                  ]}
+                  onPress={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      location: prefecture
+                    }));
+                    setShowLocationPicker(false);
+                  }}>
+                  <Text style={[
+                    styles.prefectureText,
+                    formData.location === prefecture && styles.prefectureTextActive
+                  ]}>{prefecture}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Age Picker Modal */}
+      <Modal
+        visible={showAgePicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAgePicker(false)}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>年齢を選択</Text>
+              <TouchableOpacity onPress={() => setShowAgePicker(false)}>
+                <X size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.ageList}>
+              {AGES.map((age) => (
+                <TouchableOpacity
+                  key={age}
+                  style={[
+                    styles.ageItem,
+                    formData.age === age && styles.ageItemActive
+                  ]}
+                  onPress={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      age
+                    }));
+                    setShowAgePicker(false);
+                  }}>
+                  <Text style={[
+                    styles.ageText,
+                    formData.age === age && styles.ageTextActive
+                  ]}>{age}歳</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -143,61 +629,385 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 20,
-    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1f2937',
     marginBottom: 8,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
   },
   form: {
     padding: 20,
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+  errorContainer: {
+    backgroundColor: '#fee2e2',
+    padding: 16,
     borderRadius: 12,
     marginBottom: 16,
-    paddingHorizontal: 16,
-    height: 56,
-  },
-  iconContainer: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-    paddingVertical: 12,
-  },
-  inputFocused: {
-    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#fecaca',
   },
   errorText: {
-    color: '#ff4444',
+    color: '#dc2626',
     fontSize: 14,
+    lineHeight: 20,
+  },
+  coverImageContainer: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f3f4f6',
+    marginBottom: 20,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  coverImage: {
+    width: '100%',
+    height: '100%',
+  },
+  coverImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f3f4f6',
+  },
+  coverImageButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  profileImageContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  profileImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     marginBottom: 16,
+  },
+  profileImagePlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#f3f4f6',
+    marginBottom: 16,
+  },
+  profileImageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  imageButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  textArea: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 16,
+    color: '#1f2937',
+    height: 120,
+    textAlignVertical: 'top',
+  },
+  inputFocused: {
+    borderColor: '#6366f1',
+    backgroundColor: '#fff',
+  },
+  skillsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  skillItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 8,
+  },
+  skillLabel: {
+    fontSize: 14,
+    color: '#1f2937',
+    marginRight: 8,
+  },
+  skillInput: {
+    width: 40,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 4,
+    padding: 4,
     textAlign: 'center',
   },
-  button: {
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
+  skillUnit: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginLeft: 4,
+  },
+  interestsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  interestButton: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  interestButtonSelected: {
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+  },
+  interestButtonText: {
+    fontSize: 14,
+    color: '#1f2937',
+  },
+  interestButtonTextSelected: {
+    color: '#fff',
+  },
+  submitButton: {
+    backgroundColor: '#6366f1',
     padding: 16,
+    borderRadius: 12,
     alignItems: 'center',
     marginTop: 8,
+    marginBottom: Platform.OS === 'ios' ? 40 : 20,
   },
   buttonDisabled: {
-    backgroundColor: '#ccc',
+    opacity: 0.7,
   },
-  buttonText: {
+  submitButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+  },
+  dropdownButtonText: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  selectedSkillsContainer: {
+    marginTop: 12,
+    gap: 8,
+  },
+  skillHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  skillName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1f2937',
+  },
+  skillYears: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginRight: 12,
+  },
+  removeSkillButton: {
+    padding: 4,
+  },
+  pickerModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  pickerModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  pickerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  pickerModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  pickerModalCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickerModalList: {
+    padding: 20,
+  },
+  pickerModalItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  pickerModalItemText: {
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  required: {
+    color: '#ef4444',
+    marginLeft: 4,
+  },
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+  },
+  locationButtonText: {
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  locationButtonPlaceholder: {
+    color: '#6b7280',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  prefectureList: {
+    maxHeight: 400,
+  },
+  prefectureItem: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  prefectureItemActive: {
+    backgroundColor: '#eff6ff',
+  },
+  prefectureText: {
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  prefectureTextActive: {
+    color: '#6366f1',
+    fontWeight: '500',
+  },
+  ageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+  },
+  ageButtonText: {
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  ageButtonPlaceholder: {
+    color: '#6b7280',
+  },
+  ageList: {
+    maxHeight: 400,
+  },
+  ageItem: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  ageItemActive: {
+    backgroundColor: '#eff6ff',
+  },
+  ageText: {
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  ageTextActive: {
+    color: '#6366f1',
+    fontWeight: '500',
   },
 }); 
