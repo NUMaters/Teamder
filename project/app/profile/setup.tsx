@@ -47,6 +47,7 @@ export default function ProfileSetupScreen() {
   const [showPrefectureModal, setShowPrefectureModal] = useState(false);
   const [showInterestsModal, setShowInterestsModal] = useState(false);
   const [showSkillsModal, setShowSkillsModal] = useState(false);
+  const [showSkillsDropdown, setShowSkillsDropdown] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const [showExperienceModal, setShowExperienceModal] = useState(false);
 
@@ -90,7 +91,7 @@ export default function ProfileSetupScreen() {
         aspect: type === 'profile' ? [1, 1] : [16, 9],
         quality: 1,
         selectionLimit: 1,
-        presentationStyle: Platform.OS === 'ios' ? 'pageSheet' : undefined,
+        presentationStyle: Platform.OS === 'ios' ? 'automatic' : undefined,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -118,10 +119,17 @@ export default function ProfileSetupScreen() {
     }));
   };
 
-  const addSkill = (skillName: string, years: string) => {
+  const toggleSkill = (skill: string) => {
+    setSelectedSkill(skill);
+    setShowExperienceModal(true);
+  };
+
+  const addSkillWithExperience = (skill: string, years: string) => {
     setProfileData(prev => ({
       ...prev,
-      skills: [...prev.skills, { name: skillName, years }]
+      skills: prev.skills.some(s => s.name === skill)
+        ? prev.skills.map(s => s.name === skill ? { name: skill, years } : s)
+        : [...prev.skills, { name: skill, years }]
     }));
     setSelectedSkill(null);
     setShowExperienceModal(false);
@@ -472,7 +480,7 @@ export default function ProfileSetupScreen() {
         </View>
       </Modal>
 
-      {/* 経験年数選択モーダル */}
+      {/* Experience Picker Modal */}
       <Modal
         visible={showExperienceModal}
         animationType="slide"
@@ -484,7 +492,9 @@ export default function ProfileSetupScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>経験年数を選択</Text>
+              <Text style={styles.modalTitle}>
+                {selectedSkill}の経験年数を選択
+              </Text>
               <TouchableOpacity
                 style={styles.modalCloseButton}
                 onPress={() => {
@@ -497,11 +507,11 @@ export default function ProfileSetupScreen() {
             <ScrollView style={styles.modalScrollView}>
               {EXPERIENCE_YEARS.map((years) => (
                 <TouchableOpacity
-                  key={years}
+                  key={`experience-${years}`}
                   style={styles.modalItem}
                   onPress={() => {
                     if (selectedSkill) {
-                      addSkill(selectedSkill, years);
+                      addSkillWithExperience(selectedSkill, years);
                     }
                   }}>
                   <Text style={styles.modalItemText}>{years}</Text>

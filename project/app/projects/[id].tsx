@@ -1,7 +1,23 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Platform, Alert, KeyboardAvoidingView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Save, X, MapPin, Users, Clock, CreditCard, Plus, Trash2 } from 'lucide-react-native';
+import { Save, X, MapPin, Users, Clock, CreditCard, Plus, Trash2, Upload } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '@/lib/supabase';
+
+type Project = {
+  id: string;
+  title: string;
+  company: string;
+  image: string;
+  location: string;
+  description: string;
+  teamSize: string;
+  duration: string;
+  budget: string;
+  skills: string[];
+  status: string;
+};
 
 const PROJECT_TYPES = [
   'ハッカソン',
@@ -51,30 +67,90 @@ export default function ProjectDetailsScreen() {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [showSkillSelector, setShowSkillSelector] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [project, setProject] = useState<Project | null>(null);
 
-  // In a real app, this would be fetched from your backend
-  const [project, setProject] = useState({
-    id: '1',
-    title: 'AIチャットボットプラットフォーム開発',
-    company: 'テックスタートアップ株式会社',
-    image: 'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=400',
-    location: 'リモート可',
-    description: '最新のAI技術を活用したチャットボットプラットフォームの開発。自然言語処理とマルチモーダルAIの統合が主なチャレンジです。',
-    skills: ['Python', 'TensorFlow', 'React', 'Node.js', 'AWS'],
-    teamSize: '4-6名',
-    duration: '6ヶ月',
-    budget: '〜100万円/月',
-    type: 'スタートアップ',
-    status: '募集中',
-  });
+  useEffect(() => {
+    fetchProject();
+  }, [id]);
 
-  const handleSave = () => {
-    // In a real app, this would save to your backend
-    setIsEditing(false);
-    Alert.alert('成功', 'プロジェクトが更新されました');
+  const fetchProject = async () => {
+    try {
+      console.log('Fetching project with ID:', id);
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      if (!data) {
+        console.error('No project found with ID:', id);
+        throw new Error('プロジェクトが見つかりません');
+      }
+
+      console.log('Fetched project data:', data);
+
+      // データベースのカラム名をコンポーネントのプロパティ名に変換
+      const projectData = {
+        id: data.id,
+        title: data.title,
+        company: data.company,
+        image: data.image_url || '',
+        location: data.location || '',
+        description: data.description || '',
+        teamSize: data.team_size || '',
+        duration: data.duration || '',
+        budget: data.budget || '',
+        skills: data.skills || [],
+        status: data.status || 'active',
+      };
+
+      console.log('Transformed project data:', projectData);
+      setProject(projectData);
+    } catch (error) {
+      console.error('Error fetching project:', error);
+      Alert.alert('エラー', 'プロジェクトの取得に失敗しました。');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDelete = () => {
+  const handleSave = async () => {
+    if (!project) return;
+
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          title: project.title,
+          company: project.company,
+          image_url: project.image,
+          location: project.location,
+          description: project.description,
+          team_size: project.teamSize,
+          duration: project.duration,
+          budget: project.budget,
+          skills: project.skills,
+        })
+        .eq('id', project.id);
+
+      if (error) throw error;
+      setIsEditing(false);
+      Alert.alert('成功', 'プロジェクトが更新されました');
+    } catch (error) {
+      console.error('Error updating project:', error);
+      Alert.alert('エラー', 'プロジェクトの更新に失敗しました。');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!project) return;
+
     Alert.alert(
       'プロジェクトの削除',
       'このプロジェクトを削除してもよろしいですか？',
@@ -86,9 +162,19 @@ export default function ProjectDetailsScreen() {
         {
           text: '削除',
           style: 'destructive',
-          onPress: () => {
-            // In a real app, this would delete from your backend
-            router.back();
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('projects')
+                .delete()
+                .eq('id', project.id);
+
+              if (error) throw error;
+              router.back();
+            } catch (error) {
+              console.error('Error deleting project:', error);
+              Alert.alert('エラー', 'プロジェクトの削除に失敗しました。');
+            }
           },
         },
       ],
@@ -96,16 +182,99 @@ export default function ProjectDetailsScreen() {
   };
 
   const toggleSkill = (skill: string) => {
-    setProject(prev => ({
-      ...prev,
-      skills: prev.skills.includes(skill)
-        ? prev.skills.filter(s => s !== skill)
-        : [...prev.skills, skill],
-    }));
+    setProject(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        skills: prev.skills.includes(skill)
+          ? prev.skills.filter(s => s !== skill)
+          : [...prev.skills, skill],
+      };
+    });
   };
 
+  const pickImage = async () => {
+    try {
+      // 権限をリクエスト
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('エラー', '画像を選択するには権限が必要です。');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        const file = result.assets[0];
+        const fileExt = file.uri.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        // ユーザーIDを取得
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('ユーザーが見つかりません');
+
+        // 画像をアップロード
+        const response = await fetch(file.uri);
+        const blob = await response.blob();
+
+        console.log('Uploading image to path:', filePath);
+
+        const { error: uploadError } = await supabase.storage
+          .from('project-images')
+          .upload(filePath, blob, {
+            contentType: `image/${fileExt}`,
+            cacheControl: '3600',
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          throw uploadError;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('project-images')
+          .getPublicUrl(filePath);
+
+        console.log('Upload successful, public URL:', publicUrl);
+
+        setProject(prev => {
+          if (!prev) return null;
+          return { ...prev, image: publicUrl };
+        });
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      Alert.alert('エラー', '画像のアップロードに失敗しました。もう一度お試しください。');
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text>読み込み中...</Text>
+      </View>
+    );
+  }
+
+  if (!project) {
+    return (
+      <View style={styles.container}>
+        <Text>プロジェクトが見つかりません</Text>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <TouchableOpacity
@@ -150,9 +319,20 @@ export default function ProjectDetailsScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        style={styles.content}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.scrollContent}>
         <View style={styles.imageContainer}>
           <Image source={{ uri: project.image }} style={styles.image} />
+          {isEditing && (
+            <TouchableOpacity
+              style={styles.imageUploadButton}
+              onPress={pickImage}>
+              <Upload size={24} color="#fff" />
+              <Text style={styles.imageUploadText}>画像を変更</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -267,7 +447,7 @@ export default function ProjectDetailsScreen() {
             )}
           </View>
           <View style={styles.skillsContainer}>
-            {project.skills.map((skill, index) => (
+            {project.skills.map((skill: string, index: number) => (
               <View key={index} style={styles.skillBadge}>
                 <Text style={styles.skillText}>{skill}</Text>
                 {isEditing && (
@@ -298,21 +478,21 @@ export default function ProjectDetailsScreen() {
           )}
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    padding: 16,
+    paddingTop: Platform.OS === 'ios' ? 60 : 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
@@ -381,7 +561,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   content: {
-    padding: 20,
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
   },
   imageContainer: {
     width: '100%',
@@ -389,10 +572,28 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 20,
+    position: 'relative',
   },
   image: {
     width: '100%',
     height: '100%',
+  },
+  imageUploadButton: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    gap: 8,
+  },
+  imageUploadText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   section: {
     marginBottom: 20,

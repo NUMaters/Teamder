@@ -1,57 +1,69 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ExternalLink, Clock, Users, MapPin, CreditCard, Heart } from 'lucide-react-native';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ProjectLikesModal from '@/components/ProjectLikesModal';
+import { supabase } from '@/lib/supabase';
 
-type ProjectStatus = '募集中' | '一時停止中';
-
-// In a real app, this would come from your backend
-const MY_PROJECTS = [
-  {
-    id: '1',
-    title: 'AIチャットボットプラットフォーム開発',
-    company: 'テックスタートアップ株式会社',
-    image: 'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=400',
-    location: 'リモート可',
-    description: '最新のAI技術を活用したチャットボットプラットフォームの開発。自然言語処理とマルチモーダルAIの統合が主なチャレンジです。',
-    skills: ['Python', 'TensorFlow', 'React', 'Node.js', 'AWS'],
-    teamSize: '4-6名',
-    duration: '6ヶ月',
-    budget: '〜100万円/月',
-    type: 'スタートアップ',
-    status: '募集中' as ProjectStatus,
-    applicants: 12,
-    views: 156,
-    createdAt: '2024-02-15T10:00:00Z',
-    likes: 7, // Combined likes and superlikes
-  },
-  {
-    id: '2',
-    title: 'Web3ウォレットアプリケーション開発',
-    company: 'ブロックチェーンラボ株式会社',
-    image: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=400',
-    location: 'ハイブリッド',
-    description: 'Web3対応のウォレットアプリケーション開発。複数のブロックチェーンに対応し、NFTの表示や取引機能を実装します。',
-    skills: ['React Native', 'TypeScript', 'Solidity', 'Web3.js'],
-    teamSize: '3-4名',
-    duration: '4ヶ月',
-    budget: '〜90万円/月',
-    type: '自社開発',
-    status: '一時停止中' as ProjectStatus,
-    applicants: 8,
-    views: 98,
-    createdAt: '2024-02-10T15:30:00Z',
-    likes: 4, // Combined likes and superlikes
-  },
-];
+type ProjectStatus = 'active' | 'paused' | 'completed';
 
 export default function ManageProjectsScreen() {
   const router = useRouter();
-  const [projects, setProjects] = useState(MY_PROJECTS);
+  const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isLikesModalVisible, setIsLikesModalVisible] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchMyProjects();
+  }, []);
+
+  const fetchMyProjects = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('ユーザーが見つかりません');
+
+      console.log('Fetching projects for user:', user.id);
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('owner_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      console.log('Fetched projects:', data);
+
+      // データベースのカラム名をコンポーネントのプロパティ名に変換
+      const projects = data.map(project => ({
+        id: project.id,
+        title: project.title,
+        company: project.company,
+        image: project.image_url || '',
+        location: project.location || '',
+        description: project.description || '',
+        teamSize: project.team_size || '',
+        duration: project.duration || '',
+        budget: project.budget || '',
+        skills: project.skills || [],
+        status: project.status || 'active',
+        created_at: project.created_at,
+      }));
+
+      console.log('Transformed projects:', projects);
+      setProjects(projects);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      Alert.alert('エラー', 'プロジェクトの取得に失敗しました。');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -71,12 +83,70 @@ export default function ManageProjectsScreen() {
     setIsLikesModalVisible(true);
   };
 
-  const handleStatusChange = (projectId: string, newStatus: ProjectStatus) => {
-    setProjects(prev => prev.map(project => 
-      project.id === projectId ? { ...project, status: newStatus } : project
-    ));
-    setShowStatusMenu(null);
+  const handleStatusChange = async (projectId: string, newStatus: ProjectStatus) => {
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({ status: newStatus })
+        .eq('id', projectId);
+
+      if (error) throw error;
+
+      setProjects(prev => prev.map(project => 
+        project.id === projectId ? { ...project, status: newStatus } : project
+      ));
+      setShowStatusMenu(null);
+    } catch (error) {
+      console.error('Error updating project status:', error);
+    }
   };
+
+  const getStatusDisplay = (status: ProjectStatus) => {
+    switch (status) {
+      case 'active':
+        return '募集中';
+      case 'paused':
+        return '停止中';
+      case 'completed':
+        return '完了';
+      default:
+        return status;
+    }
+  };
+
+  const getStatusStyle = (status: ProjectStatus) => {
+    switch (status) {
+      case 'active':
+        return styles.statusActive;
+      case 'paused':
+        return styles.statusPaused;
+      case 'completed':
+        return styles.statusCompleted;
+      default:
+        return {};
+    }
+  };
+
+  const getStatusTextStyle = (status: ProjectStatus) => {
+    switch (status) {
+      case 'active':
+        return styles.statusTextActive;
+      case 'paused':
+        return styles.statusTextPaused;
+      case 'completed':
+        return styles.statusTextCompleted;
+      default:
+        return {};
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text>読み込み中...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -84,112 +154,114 @@ export default function ManageProjectsScreen() {
         <Text style={styles.headerTitle}>プロジェクト管理</Text>
         <TouchableOpacity
           style={styles.createButton}
-          onPress={() => router.push('/')}>
+          onPress={() => router.push('/projects/create')}>
           <Text style={styles.createButtonText}>新規作成</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content}>
-        {projects.map((project) => (
-          <View key={project.id} style={styles.projectCard}>
-            <View style={styles.projectHeader}>
-              <Image source={{ uri: project.image }} style={styles.projectImage} />
-              <View style={styles.projectHeaderContent}>
-                <Text style={styles.projectTitle}>{project.title}</Text>
-                <Text style={styles.companyName}>{project.company}</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.statusBadge,
-                    project.status === '募集中' ? styles.statusActive : styles.statusPaused
-                  ]}
-                  onPress={() => setShowStatusMenu(project.id)}>
-                  <Text style={[
-                    styles.statusText,
-                    project.status === '募集中' ? styles.statusTextActive : styles.statusTextPaused
-                  ]}>
-                    {project.status}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {showStatusMenu === project.id && (
-              <View style={styles.statusMenu}>
-                <TouchableOpacity
-                  style={styles.statusMenuItem}
-                  onPress={() => handleStatusChange(project.id, '募集中')}>
-                  <Text style={[
-                    styles.statusMenuText,
-                    project.status === '募集中' && styles.statusMenuTextActive
-                  ]}>
-                    募集中
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.statusMenuItem}
-                  onPress={() => handleStatusChange(project.id, '一時停止中')}>
-                  <Text style={[
-                    styles.statusMenuText,
-                    project.status === '一時停止中' && styles.statusMenuTextActive
-                  ]}>
-                    一時停止中
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            <View style={styles.projectStats}>
-              <View style={styles.statItem}>
-                <Users size={16} color="#6b7280" />
-                <Text style={styles.statText}>{project.teamSize}</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Clock size={16} color="#6b7280" />
-                <Text style={styles.statText}>{project.duration}</Text>
-              </View>
-              <View style={styles.statItem}>
-                <MapPin size={16} color="#6b7280" />
-                <Text style={styles.statText}>{project.location}</Text>
-              </View>
-              <View style={styles.statItem}>
-                <CreditCard size={16} color="#6b7280" />
-                <Text style={styles.statText}>{project.budget}</Text>
-              </View>
-            </View>
-
-            <View style={styles.skillsContainer}>
-              {project.skills.map((skill, index) => (
-                <View key={index} style={styles.skillBadge}>
-                  <Text style={styles.skillText}>{skill}</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={styles.projectMetrics}>
-              <Text style={styles.metricText}>応募者数: {project.applicants}人</Text>
-              <Text style={styles.metricText}>閲覧数: {project.views}回</Text>
-              <Text style={styles.metricText}>作成日: {formatDate(project.createdAt)}</Text>
-            </View>
-
-            <View style={styles.likesContainer}>
-              <TouchableOpacity
-                style={styles.likesButton}
-                onPress={() => handleViewLikes(project.id)}>
-                <Heart size={16} color="#ec4899" />
-                <Text style={styles.likesText}>
-                  いいね {project.likes}件
-                </Text>
-              </TouchableOpacity>
-            </View>
-
+        {projects.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>作成したプロジェクトはありません</Text>
             <TouchableOpacity
-              style={styles.viewButton}
-              onPress={() => handleViewDetails(project.id)}>
-              <ExternalLink size={20} color="#6366f1" />
-              <Text style={styles.viewButtonText}>詳細を見る</Text>
+              style={styles.createProjectButton}
+              onPress={() => router.push('/projects/create')}>
+              <Text style={styles.createProjectButtonText}>プロジェクトを作成する</Text>
             </TouchableOpacity>
           </View>
-        ))}
+        ) : (
+          projects.map((project) => (
+            <View key={project.id} style={styles.projectCard}>
+              <View style={styles.projectHeader}>
+                <Image source={{ uri: project.image }} style={styles.projectImage} />
+                <View style={styles.projectHeaderContent}>
+                  <Text style={styles.projectTitle}>{project.title}</Text>
+                  <Text style={styles.companyName}>{project.company}</Text>
+                  <TouchableOpacity
+                    style={[styles.statusBadge, getStatusStyle(project.status)]}
+                    onPress={() => setShowStatusMenu(project.id)}>
+                    <Text style={[styles.statusText, getStatusTextStyle(project.status)]}>
+                      {getStatusDisplay(project.status)}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {showStatusMenu === project.id && (
+                <View style={styles.statusMenu}>
+                  <TouchableOpacity
+                    style={styles.statusMenuItem}
+                    onPress={() => handleStatusChange(project.id, 'active')}>
+                    <Text style={[
+                      styles.statusMenuText,
+                      project.status === 'active' && styles.statusMenuTextActive
+                    ]}>
+                      募集中
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.statusMenuItem}
+                    onPress={() => handleStatusChange(project.id, 'paused')}>
+                    <Text style={[
+                      styles.statusMenuText,
+                      project.status === 'paused' && styles.statusMenuTextActive
+                    ]}>
+                      停止中
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.statusMenuItem}
+                    onPress={() => handleStatusChange(project.id, 'completed')}>
+                    <Text style={[
+                      styles.statusMenuText,
+                      project.status === 'completed' && styles.statusMenuTextActive
+                    ]}>
+                      完了
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <View style={styles.projectStats}>
+                <View style={styles.statItem}>
+                  <Users size={16} color="#6b7280" />
+                  <Text style={styles.statText}>{project.teamSize}</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Clock size={16} color="#6b7280" />
+                  <Text style={styles.statText}>{project.duration}</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <MapPin size={16} color="#6b7280" />
+                  <Text style={styles.statText}>{project.location}</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <CreditCard size={16} color="#6b7280" />
+                  <Text style={styles.statText}>{project.budget}</Text>
+                </View>
+              </View>
+
+              <View style={styles.skillsContainer}>
+                {project.skills?.map((skill: string, index: number) => (
+                  <View key={index} style={styles.skillBadge}>
+                    <Text style={styles.skillText}>{skill}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.projectMetrics}>
+                <Text style={styles.metricText}>作成日: {formatDate(project.created_at)}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.viewButton}
+                onPress={() => handleViewDetails(project.id)}>
+                <ExternalLink size={20} color="#6366f1" />
+                <Text style={styles.viewButtonText}>詳細を見る</Text>
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
       </ScrollView>
 
       {selectedProjectId && (
@@ -239,6 +311,27 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#6b7280',
+    marginBottom: 20,
+  },
+  createProjectButton: {
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  createProjectButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   projectCard: {
     backgroundColor: '#fff',
@@ -290,6 +383,9 @@ const styles = StyleSheet.create({
   statusPaused: {
     backgroundColor: '#fee2e2',
   },
+  statusCompleted: {
+    backgroundColor: '#e5e7eb',
+  },
   statusText: {
     fontSize: 12,
     fontWeight: '500',
@@ -300,27 +396,20 @@ const styles = StyleSheet.create({
   statusTextPaused: {
     color: '#dc2626',
   },
+  statusTextCompleted: {
+    color: '#4b5563',
+  },
   statusMenu: {
-    position: 'absolute',
-    top: 80,
-    right: 16,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    zIndex: 1,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   statusMenuItem: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
   statusMenuText: {
     fontSize: 14,
@@ -333,7 +422,7 @@ const styles = StyleSheet.create({
   projectStats: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 12,
     marginBottom: 16,
   },
   statItem: {
@@ -352,9 +441,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   skillBadge: {
-    backgroundColor: '#e0e7ff',
+    backgroundColor: '#f3f4f6',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderRadius: 12,
   },
   skillText: {
@@ -363,47 +452,24 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   projectMetrics: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
     marginBottom: 16,
   },
   metricText: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  likesContainer: {
-    marginBottom: 16,
-  },
-  likesButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#fce7f3',
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-  },
-  likesText: {
     fontSize: 14,
-    color: '#ec4899',
-    fontWeight: '500',
+    color: '#6b7280',
   },
   viewButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e0e7ff',
-    paddingVertical: 12,
-    borderRadius: 12,
     gap: 8,
+    backgroundColor: '#f3f4f6',
+    padding: 12,
+    borderRadius: 12,
   },
   viewButtonText: {
     color: '#6366f1',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
 });
