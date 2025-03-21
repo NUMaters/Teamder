@@ -74,6 +74,7 @@ Teamderは、チームメイキングをサポートするモバイルアプリ�
 
 5. **依存パッケージのインストール**
    ```bash
+   cd project
    npm install
    ```
 
