@@ -45,21 +45,8 @@ export default function RegisterScreen() {
       // API Gatewayにリクエストを送信
       const apiResponse = await axios.post(
         `${API_GATEWAY_URL}/register`,
-        {
-          email,
-          password,
-          client_id: COGNITO_CLIENT_ID
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': API_KEY,
-            'Authorization': `Bearer ${AUTH_TOKEN}`
-          }
-        }
+        { email, password }
       );
-
-      console.log('API Response:', apiResponse.data);
       
       if (apiResponse.data && apiResponse.data.id_token) {
         return { id_token: apiResponse.data.id_token };
