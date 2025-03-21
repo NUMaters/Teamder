@@ -108,6 +108,9 @@ export default function DiscoverScreen() {
   const fetchProfiles = async () => {
     try {
       setIsLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -119,9 +122,23 @@ export default function DiscoverScreen() {
 
       if (data) {
         const formattedProfiles: Profile[] = data.map(profile => ({
-          ...profile,
+          id: profile.id,
+          name: profile.name,
+          title: profile.title,
+          location: profile.location,
+          email: profile.email,
+          website: profile.website,
+          image_url: profile.image_url,
+          cover_url: profile.cover_url,
+          bio: profile.bio,
+          university: profile.university,
+          github_username: profile.github_username,
+          twitter_username: profile.twitter_username,
           interests: profile.interests || [],
           skills: profile.skills || [],
+          created_at: profile.created_at,
+          updated_at: profile.updated_at,
+          age: profile.age,
           likes: profile.likes || []
         }));
         setProfiles(formattedProfiles);

@@ -8,7 +8,6 @@ type ProfileFormData = {
   name: string;
   title: string;
   university: string;
-  department: string;
   location: string;
   githubUsername: string;
   twitterUsername: string;
@@ -150,7 +149,6 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
           name: formData.name,
           title: formData.title,
           university: formData.university,
-          department: formData.department,
           location: formData.location,
           github_username: formData.githubUsername,
           twitter_username: formData.twitterUsername,
@@ -164,9 +162,8 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
 
       if (error) throw error;
 
-      // プロフィール更新後に親コンポーネントに通知
       onClose();
-      onUpdate(); // 親コンポーネントの更新関数を呼び出す
+      onUpdate();
     } catch (error) {
       console.error('プロフィール更新エラー:', error);
       Alert.alert('エラー', 'プロフィールの更新に失敗しました');
@@ -244,16 +241,6 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
                 value={formData.university}
                 onChangeText={(text) => setFormData(prev => ({ ...prev, university: text }))}
                 placeholder="例：東京大学"
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>学部・学科</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.department}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, department: text }))}
-                placeholder="例：工学部情報工学科"
               />
             </View>
 
