@@ -20,38 +20,7 @@ import {
   BookOpen,
   Building2
 } from 'lucide-react-native';
-
-type Skill = {
-  name: string;
-  years: string;
-};
-
-type Activity = {
-  id: string;
-  title: string;
-  period: string;
-  description: string;
-  link?: string;
-};
-
-type ProfileData = {
-  name: string;
-  title: string;
-  location: string;
-  email: string;
-  website: string;
-  image: string;
-  coverUrl: string;
-  bio: string;
-  githubUsername: string;
-  twitterUsername: string;
-  interests: string[];
-  skills: Skill[];
-  age: string;
-  university: string;
-  activities: Activity[];
-  certifications: string[];
-};
+import { ProfileData, Activity, Skill } from '@/types/profile';
 
 type ProfileContentProps = {
   profile: ProfileData;

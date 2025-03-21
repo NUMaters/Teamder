@@ -7,14 +7,14 @@ import { MessageCircle } from 'lucide-react-native';
 type User = {
   id: string;
   name: string;
-  avatar_url: string;
+  image: string;
 };
 
 type Project = {
   id: string;
   title: string;
-  company: string;
-  image_url: string;
+  university: string;
+  image: string;
   owner_id: string;
 };
 
@@ -49,8 +49,8 @@ export default function MatchesScreen() {
         .from('matches')
         .select(`
           id,
-          user:user2_id(id, name, avatar_url),
-          project:project_id(id, title, company, image_url, owner_id),
+          user:user2_id(id, name, image),
+          project:project_id(id, title, university, image, owner_id),
           chat_room:chat_rooms(id, last_message, last_message_at)
         `)
         .eq('user1_id', user?.id);
@@ -88,7 +88,7 @@ export default function MatchesScreen() {
     <TouchableOpacity
       style={styles.matchCard}
       onPress={() => router.push(`/chat/${item.chat_room.id}`)}>
-      <Image source={{ uri: item.user.avatar_url }} style={styles.avatar} />
+      <Image source={{ uri: item.user.image }} style={styles.avatar} />
       <View style={styles.matchInfo}>
         <Text style={styles.userName}>{item.user.name}</Text>
         <Text style={styles.projectTitle}>{item.project.title}</Text>

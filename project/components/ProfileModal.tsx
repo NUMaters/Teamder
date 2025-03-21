@@ -1,6 +1,7 @@
 import { Modal, View, StyleSheet, TouchableOpacity, Platform, Dimensions } from 'react-native';
 import { X } from 'lucide-react-native';
 import ProfileContent from './ProfileContent';
+import { ProfileData } from '@/types/profile';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -9,23 +10,12 @@ type Skill = {
   years: string;
 };
 
-type ProfileData = {
-  name: string;
+type Activity = {
+  id: string;
   title: string;
-  location: string;
-  email: string;
-  website: string;
-  image: string;
-  coverUrl: string;
-  bio: string;
-  githubUsername: string;
-  twitterUsername: string;
-  interests: string[];
-  skills: Skill[];
-  age: string;
-  university: string;
-  activities: string[];
-  certifications: string[];
+  period: string;
+  description: string;
+  link?: string;
 };
 
 interface ProfileModalProps {

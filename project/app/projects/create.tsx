@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Platform, Alert, KeyboardAvoidingView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Save, X, MapPin, Users, Clock, CreditCard, Plus, Upload } from 'lucide-react-native';
+import { Save, X, MapPin, Users, Clock, CreditCard, Plus, Upload, ArrowLeft } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 
@@ -48,61 +48,63 @@ const TECH_STACKS = [
   'Natural Language Processing',
 ];
 
+type ProjectStatus = 'active' | 'paused' | 'completed';
+
+type ProjectFormData = {
+  title: string;
+  university: string;
+  image_url: string;
+  location: string;
+  description: string;
+  team_size: string;
+  duration: string;
+  budget: string;
+  status: ProjectStatus;
+};
+
 export default function CreateProjectScreen() {
   const router = useRouter();
-  const [showSkillSelector, setShowSkillSelector] = useState(false);
-  const [project, setProject] = useState({
+  const [formData, setFormData] = useState<ProjectFormData>({
     title: '',
-    company: '',
-    image: '',
+    university: '',
+    image_url: '',
     location: '',
     description: '',
-    teamSize: '',
+    team_size: '',
     duration: '',
     budget: '',
-    skills: [],
+    status: 'active',
   });
+  const [loading, setLoading] = useState(false);
 
-  const handleSave = async () => {
+  const handleSubmit = async () => {
     try {
+      setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('ユーザーが見つかりません');
+      
+      if (!user) {
+        throw new Error('ユーザーが見つかりません');
+      }
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('projects')
         .insert([
           {
-            owner_id: user.id,
-            title: project.title,
-            company: project.company,
-            image: project.image,
-            location: project.location,
-            description: project.description,
-            team_size: project.teamSize,
-            duration: project.duration,
-            budget: project.budget,
-            skills: project.skills,
-            status: 'active',
-          },
-        ])
-        .select()
-        .single();
+            ...formData,
+            user_id: user.id,
+          }
+        ]);
 
       if (error) throw error;
-      router.push(`/projects/${data.id}`);
+
+      Alert.alert('成功', 'プロジェクトを作成しました');
+      router.back();
     } catch (error) {
       console.error('Error creating project:', error);
-      Alert.alert('エラー', 'プロジェクトの作成に失敗しました。');
+      Alert.alert('エラー', 'プロジェクトの作成に失敗しました');
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const toggleSkill = (skill: string) => {
-    setProject(prev => ({
-      ...prev,
-      skills: prev.skills.includes(skill)
-        ? prev.skills.filter(s => s !== skill)
-        : [...prev.skills, skill],
-    }));
   };
 
   const pickImage = async () => {
@@ -121,193 +123,161 @@ export default function CreateProjectScreen() {
       });
 
       if (!result.canceled) {
-        const file = result.assets[0];
-        const fileExt = file.uri.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = `${fileName}`;
-
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('ユーザーが見つかりません');
+
+        const file = result.assets[0];
+        const fileExt = file.uri.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `${user.id}/${fileName}`;
 
         const response = await fetch(file.uri);
         const blob = await response.blob();
 
         const { error: uploadError } = await supabase.storage
-          .from('project-images')
+          .from('projects')
           .upload(filePath, blob, {
             contentType: `image/${fileExt}`,
             cacheControl: '3600',
-            upsert: true,
+            upsert: true
           });
 
         if (uploadError) throw uploadError;
 
         const { data: { publicUrl } } = supabase.storage
-          .from('project-images')
+          .from('projects')
           .getPublicUrl(filePath);
 
-        setProject(prev => ({ ...prev, image: publicUrl }));
+        setFormData(prev => ({ ...prev, image_url: publicUrl }));
       }
     } catch (error) {
       console.error('Error uploading image:', error);
-      Alert.alert('エラー', '画像のアップロードに失敗しました。もう一度お試しください。');
+      Alert.alert('エラー', '画像のアップロードに失敗しました');
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}>
-            <X size={24} color="#1f2937" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>新規プロジェクト作成</Text>
-        </View>
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => router.back()}>
+          <ArrowLeft size={24} color="#000" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>新規プロジェクト</Text>
         <TouchableOpacity
           style={[styles.headerButton, styles.saveButton]}
-          onPress={handleSave}>
+          onPress={handleSubmit}
+          disabled={loading}>
           <Save size={20} color="#fff" />
           <Text style={styles.saveButtonText}>作成</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={styles.content}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.scrollContent}>
-        <View style={styles.imageContainer}>
-          {project.image ? (
-            <Image source={{ uri: project.image }} style={styles.image} />
+      <ScrollView style={styles.content}>
+        <TouchableOpacity 
+          style={styles.imageContainer}
+          onPress={pickImage}>
+          {formData.image_url ? (
+            <Image source={{ uri: formData.image_url }} style={styles.image} />
           ) : (
             <View style={styles.imagePlaceholder}>
-              <Upload size={32} color="#6b7280" />
-              <Text style={styles.imagePlaceholderText}>画像を選択</Text>
+              <Upload size={48} color="#9ca3af" />
+              <Text style={styles.imagePlaceholderText}>
+                タップして画像を追加
+              </Text>
             </View>
           )}
-          <TouchableOpacity
-            style={styles.imageUploadButton}
-            onPress={pickImage}>
-            <Upload size={24} color="#fff" />
-            <Text style={styles.imageUploadText}>画像を選択</Text>
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
 
-        <View style={styles.section}>
-          <Text style={styles.label}>プロジェクト名</Text>
-          <TextInput
-            style={styles.input}
-            value={project.title}
-            onChangeText={(text) => setProject({ ...project, title: text })}
-            placeholder="プロジェクト名を入力"
-          />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>会社名</Text>
-          <TextInput
-            style={styles.input}
-            value={project.company}
-            onChangeText={(text) => setProject({ ...project, company: text })}
-            placeholder="会社名を入力"
-          />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>プロジェクト概要</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={project.description}
-            onChangeText={(text) => setProject({ ...project, description: text })}
-            placeholder="プロジェクトの詳細な説明を入力"
-            multiline
-            numberOfLines={4}
-          />
-        </View>
-
-        <View style={styles.infoGrid}>
-          <View style={styles.infoItem}>
-            <MapPin size={20} color="#6b7280" />
+        <View style={styles.form}>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>プロジェクト名</Text>
             <TextInput
-              style={styles.infoInput}
-              value={project.location}
-              onChangeText={(text) => setProject({ ...project, location: text })}
-              placeholder="勤務地"
+              style={styles.input}
+              value={formData.title}
+              onChangeText={(text) => setFormData({ ...formData, title: text })}
+              placeholder="プロジェクト名を入力"
+              placeholderTextColor="#9ca3af"
             />
           </View>
-          <View style={styles.infoItem}>
-            <Users size={20} color="#6b7280" />
-            <TextInput
-              style={styles.infoInput}
-              value={project.teamSize}
-              onChangeText={(text) => setProject({ ...project, teamSize: text })}
-              placeholder="チーム規模"
-            />
-          </View>
-          <View style={styles.infoItem}>
-            <Clock size={20} color="#6b7280" />
-            <TextInput
-              style={styles.infoInput}
-              value={project.duration}
-              onChangeText={(text) => setProject({ ...project, duration: text })}
-              placeholder="期間"
-            />
-          </View>
-          <View style={styles.infoItem}>
-            <CreditCard size={20} color="#6b7280" />
-            <TextInput
-              style={styles.infoInput}
-              value={project.budget}
-              onChangeText={(text) => setProject({ ...project, budget: text })}
-              placeholder="予算"
-            />
-          </View>
-        </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.label}>必要なスキル</Text>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => setShowSkillSelector(!showSkillSelector)}>
-              <Plus size={20} color="#6366f1" />
-              <Text style={styles.addButtonText}>追加</Text>
-            </TouchableOpacity>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>大学名</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.university}
+              onChangeText={(text) => setFormData({ ...formData, university: text })}
+              placeholder="大学名を入力"
+              placeholderTextColor="#9ca3af"
+            />
           </View>
-          <View style={styles.skillsContainer}>
-            {project.skills.map((skill: string, index: number) => (
-              <View key={index} style={styles.skillBadge}>
-                <Text style={styles.skillText}>{skill}</Text>
-                <TouchableOpacity
-                  onPress={() => toggleSkill(skill)}
-                  style={styles.removeSkillButton}>
-                  <X size={12} color="#4f46e5" />
-                </TouchableOpacity>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>説明</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={formData.description}
+              onChangeText={(text) => setFormData({ ...formData, description: text })}
+              placeholder="プロジェクトの詳細な説明を入力"
+              placeholderTextColor="#9ca3af"
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>基本情報</Text>
+            <View style={styles.infoGrid}>
+              <View style={styles.infoItem}>
+                <MapPin size={20} color="#6b7280" />
+                <TextInput
+                  style={styles.infoInput}
+                  value={formData.location}
+                  onChangeText={(text) => setFormData({ ...formData, location: text })}
+                  placeholder="勤務地"
+                  placeholderTextColor="#9ca3af"
+                />
               </View>
-            ))}
-          </View>
-          {showSkillSelector && (
-            <View style={styles.skillSelector}>
-              {TECH_STACKS.filter(skill => !project.skills.includes(skill)).map((skill) => (
-                <TouchableOpacity
-                  key={skill}
-                  style={styles.skillOption}
-                  onPress={() => {
-                    toggleSkill(skill);
-                    setShowSkillSelector(false);
-                  }}>
-                  <Text style={styles.skillOptionText}>{skill}</Text>
-                  <Plus size={16} color="#6366f1" />
-                </TouchableOpacity>
-              ))}
+
+              <View style={styles.infoItem}>
+                <Users size={20} color="#6b7280" />
+                <TextInput
+                  style={styles.infoInput}
+                  value={formData.team_size}
+                  onChangeText={(text) => setFormData({ ...formData, team_size: text })}
+                  placeholder="チーム規模"
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+
+              <View style={styles.infoItem}>
+                <Clock size={20} color="#6b7280" />
+                <TextInput
+                  style={styles.infoInput}
+                  value={formData.duration}
+                  onChangeText={(text) => setFormData({ ...formData, duration: text })}
+                  placeholder="期間"
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+
+              <View style={styles.infoItem}>
+                <CreditCard size={20} color="#6b7280" />
+                <TextInput
+                  style={styles.infoInput}
+                  value={formData.budget}
+                  onChangeText={(text) => setFormData({ ...formData, budget: text })}
+                  placeholder="予算"
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
             </View>
-          )}
+          </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -318,109 +288,73 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     paddingTop: Platform.OS === 'ios' ? 60 : 16,
+    paddingBottom: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f3f4f6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
   headerButton: {
+    padding: 8,
+    borderRadius: 8,
+  },
+  saveButton: {
+    backgroundColor: '#4f46e5',
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    gap: 8,
-  },
-  saveButton: {
-    backgroundColor: '#6366f1',
   },
   saveButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
   },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
   content: {
     flex: 1,
-  },
-  scrollContent: {
     padding: 16,
   },
   imageContainer: {
-    width: '100%',
-    height: 200,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 20,
-    position: 'relative',
+    aspectRatio: 16 / 9,
     backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    marginBottom: 24,
+    overflow: 'hidden',
   },
   image: {
     width: '100%',
     height: '100%',
   },
   imagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
+    flex: 1,
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 12,
   },
   imagePlaceholderText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#6b7280',
   },
-  imageUploadButton: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
+  form: {
+    gap: 24,
+  },
+  formGroup: {
     gap: 8,
   },
-  imageUploadText: {
-    color: '#fff',
+  label: {
     fontSize: 14,
     fontWeight: '600',
-  },
-  section: {
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#1f2937',
-    marginBottom: 8,
+    color: '#374151',
   },
   input: {
     borderWidth: 1,
@@ -428,18 +362,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    color: '#1f2937',
+    color: '#111827',
     backgroundColor: '#fff',
   },
   textArea: {
-    height: 100,
+    height: 120,
     textAlignVertical: 'top',
   },
   infoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
-    marginBottom: 20,
+    gap: 12,
   },
   infoItem: {
     flex: 1,
@@ -447,77 +380,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#fff',
+    backgroundColor: '#f9fafb',
     padding: 12,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
   },
   infoInput: {
     flex: 1,
-    fontSize: 14,
-    color: '#1f2937',
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#e0e7ff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  addButtonText: {
-    fontSize: 14,
-    color: '#6366f1',
-    fontWeight: '500',
-  },
-  skillsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  skillBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e0e7ff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 8,
-  },
-  skillText: {
-    fontSize: 14,
-    color: '#4f46e5',
-    fontWeight: '500',
-  },
-  removeSkillButton: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#c7d2fe',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  skillSelector: {
-    marginTop: 12,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 8,
-  },
-  skillOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  skillOptionText: {
-    fontSize: 14,
-    color: '#1f2937',
+    fontSize: 16,
+    color: '#111827',
   },
 }); 

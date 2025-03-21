@@ -11,19 +11,20 @@ type Project = {
   id: string;
   title: string;
   university: string;
-  image: string;
+  image_url: string;
   location: string;
   description: string;
-  teamSize: string;
+  team_size: string;
   duration: string;
   budget: string;
-  skills: string[];
-  status: string;
+  status: ProjectStatus;
+  created_at: string;
+  user_id: string;
 };
 
 export default function ManageProjectsScreen() {
   const router = useRouter();
-  const [projects, setProjects] = useState<any[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isLikesModalVisible, setIsLikesModalVisible] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState<string | null>(null);
@@ -42,19 +43,42 @@ export default function ManageProjectsScreen() {
         throw new Error('ユーザーが見つかりません');
       }
 
+      console.log('Current user:', user);
+
+      // まず全てのプロジェクトを取得してデバッグ
+      const { data: allProjects, error: allProjectsError } = await supabase
+        .from('projects')
+        .select('*');
+
+      console.log('All projects:', allProjects); // 全プロジェクトをログ出力
+
       const { data, error } = await supabase
         .from('projects')
         .select(`
-          *,
-          profiles:user_id (
-            name,
-            avatar_url
-          )
+          id,
+          title,
+          university,
+          image_url,
+          location,
+          description,
+          team_size,
+          duration,
+          budget,
+          status,
+          created_at,
+          user_id
         `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      console.log('Fetched projects:', data);
+      console.log('Query parameters:', { user_id: user.id });
+
       setProjects(data || []);
     } catch (error) {
       console.error('Error fetching projects:', error);
@@ -169,10 +193,15 @@ export default function ManageProjectsScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          projects.map((project) => (
+          projects.map((project: Project) => (
             <View key={project.id} style={styles.projectCard}>
               <View style={styles.projectHeader}>
-                <Image source={{ uri: project.image }} style={styles.projectImage} />
+                <Image 
+                  source={{ 
+                    uri: project.image_url || 'https://via.placeholder.com/80'
+                  }} 
+                  style={styles.projectImage} 
+                />
                 <View style={styles.projectHeaderContent}>
                   <Text style={styles.projectTitle}>{project.title}</Text>
                   <Text style={styles.universityName}>{project.university}</Text>
@@ -224,7 +253,7 @@ export default function ManageProjectsScreen() {
               <View style={styles.projectStats}>
                 <View style={styles.statItem}>
                   <Users size={16} color="#6b7280" />
-                  <Text style={styles.statText}>{project.teamSize}</Text>
+                  <Text style={styles.statText}>{project.team_size}</Text>
                 </View>
                 <View style={styles.statItem}>
                   <Clock size={16} color="#6b7280" />
@@ -238,14 +267,6 @@ export default function ManageProjectsScreen() {
                   <CreditCard size={16} color="#6b7280" />
                   <Text style={styles.statText}>{project.budget}</Text>
                 </View>
-              </View>
-
-              <View style={styles.skillsContainer}>
-                {project.skills?.map((skill: string, index: number) => (
-                  <View key={index} style={styles.skillBadge}>
-                    <Text style={styles.skillText}>{skill}</Text>
-                  </View>
-                ))}
               </View>
 
               <View style={styles.projectMetrics}>
@@ -432,23 +453,6 @@ const styles = StyleSheet.create({
   statText: {
     fontSize: 14,
     color: '#6b7280',
-  },
-  skillsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  skillBadge: {
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  skillText: {
-    fontSize: 12,
-    color: '#4f46e5',
-    fontWeight: '500',
   },
   projectMetrics: {
     marginBottom: 16,
