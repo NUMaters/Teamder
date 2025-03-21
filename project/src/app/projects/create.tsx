@@ -91,7 +91,7 @@ export default function CreateProjectScreen() {
         .insert([
           {
             ...formData,
-            user_id: user.id,
+            owner_id: user.id,
           }
         ]);
 
