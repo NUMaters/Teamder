@@ -1,59 +1,31 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Stack, Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { supabase } from '@/lib/supabase';
 import { View } from 'react-native';
+import { useAuth } from '../hooks/useAuth';
 
 export default function RootLayout() {
   useFrameworkReady();
-  const [initialized, setInitialized] = useState(false);
+  const { session, initialized } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    // Initialize auth state before any navigation
-    const initializeAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const inAuthGroup = segments[0] === '(auth)';
+    if (!initialized) return;
 
-        if (!initialized) {
-          setInitialized(true);
-          
-          if (session && inAuthGroup) {
-            // Logged in, trying to access auth page -> redirect to home
-            router.replace('/(tabs)');
-          } else if (!session && !inAuthGroup) {
-            // Not logged in, trying to access protected page -> redirect to login
-            router.replace('/login');
-          }
-        }
-      } catch (error) {
-        console.error('Auth initialization error:', error);
-        setInitialized(true); // Still set initialized to prevent infinite loading
-      }
-    };
+    const inAuthGroup = segments[0] === '(auth)';
+    const isTopPage = segments[0] === undefined;
 
-    initializeAuth();
-
-    // Subscribe to auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!initialized) return; // Don't handle navigation until initialized
-
-      const inAuthGroup = segments[0] === '(auth)';
-
-      if (event === 'SIGNED_IN' && inAuthGroup) {
-        router.replace('/(tabs)');
-      } else if (event === 'SIGNED_OUT' && !inAuthGroup) {
-        router.replace('/login');
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [segments, initialized]);
+    if (!session && !inAuthGroup && !isTopPage) {
+      // トップページ以外の未認証ページにアクセスした場合のみログインページにリダイレクト
+      router.replace('/login');
+    } else if (session && inAuthGroup) {
+      // 認証済みユーザーが認証グループのページにアクセスした場合
+      router.replace('/');
+    }
+  }, [session, initialized, segments]);
 
   // Show a loading state while initializing
   if (!initialized) {

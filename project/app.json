@@ -29,8 +29,11 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      [
+        "expo-router"
+      ]
     ],
-    "scheme": "teamder"
+    "scheme": "teamder",
+    "newArchEnabled": true
   }
 }
