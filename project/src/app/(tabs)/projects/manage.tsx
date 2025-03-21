@@ -19,7 +19,7 @@ type Project = {
   budget: string;
   status: ProjectStatus;
   created_at: string;
-  user_id: string;
+  owner_id: string;
 };
 
 export default function ManageProjectsScreen() {
@@ -50,9 +50,10 @@ export default function ManageProjectsScreen() {
         .from('projects')
         .select('*');
 
-      console.log('All projects:', allProjects); // 全プロジェクトをログ出力
+      console.log('All projects in database:', allProjects); // 全プロジェクトの詳細をログ出力
 
-      const { data, error } = await supabase
+      // owner_idでフィルタリングする前のクエリをデバッグ
+      const { data: myProjects, error } = await supabase
         .from('projects')
         .select(`
           id,
@@ -66,9 +67,9 @@ export default function ManageProjectsScreen() {
           budget,
           status,
           created_at,
-          user_id
+          owner_id
         `)
-        .eq('user_id', user.id)
+        .eq('owner_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -76,10 +77,11 @@ export default function ManageProjectsScreen() {
         throw error;
       }
 
-      console.log('Fetched projects:', data);
-      console.log('Query parameters:', { user_id: user.id });
+      console.log('Current user ID:', user.id);
+      console.log('Fetched projects:', myProjects);
+      console.log('Projects count:', myProjects ? myProjects.length : 0);
 
-      setProjects(data || []);
+      setProjects(myProjects || []);
     } catch (error) {
       console.error('Error fetching projects:', error);
       Alert.alert('エラー', 'プロジェクトの取得に失敗しました');

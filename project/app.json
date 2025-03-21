@@ -1,33 +1,36 @@
 {
   "expo": {
-    "name": "EngineerMatching",
-    "slug": "engineer-matching",
+    "name": "Teamder",
+    "slug": "teamder",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.example.engineermatching"
+      "bundleIdentifier": "com.teamder.app"
     },
     "android": {
-      "package": "com.example.engineermatching",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.teamder.app"
     },
     "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-router"],
-    "experiments": {
-      "typedRoutes": true,
-      "tsconfigPaths": true
-    }
+    "plugins": [
+      "expo-router"
+    ],
+    "scheme": "teamder"
   }
 }
