@@ -1,8 +1,16 @@
 import { useState } from 'react';
-import { Modal, View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, TextInput, Image, Alert, Linking } from 'react-native';
+import { Modal, View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, TextInput, Image, Alert, Linking, KeyboardAvoidingView } from 'react-native';
 import { X, Plus, ChevronDown, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
+
+type Activity = {
+  id: string;
+  title: string;
+  period: string;
+  description: string;
+  link?: string;
+};
 
 type ProfileFormData = {
   name: string;
@@ -17,6 +25,7 @@ type ProfileFormData = {
   skills: Array<{ name: string; years: string }>;
   interests: string[];
   age: string;
+  activities: Activity[];
 };
 
 interface EditProfileModalProps {
@@ -53,7 +62,10 @@ const EXPERIENCE_YEARS = [
 ];
 
 export default function EditProfileModal({ isVisible, onClose, onUpdate, initialData }: EditProfileModalProps) {
-  const [formData, setFormData] = useState<ProfileFormData>(initialData);
+  const [formData, setFormData] = useState<ProfileFormData>({
+    ...initialData,
+    activities: initialData.activities || []
+  });
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showSkillsDropdown, setShowSkillsDropdown] = useState(false);
   const [showInterestsPicker, setShowInterestsPicker] = useState(false);
@@ -139,6 +151,35 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
     }));
   };
 
+  const addNewActivity = () => {
+    setFormData(prev => ({
+      ...prev,
+      activities: [...prev.activities, {
+        id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        title: '',
+        period: '',
+        description: '',
+        link: ''
+      }]
+    }));
+  };
+
+  const updateActivity = (id: string, field: keyof Activity, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      activities: prev.activities.map(activity =>
+        activity.id === id ? { ...activity, [field]: value } : activity
+      )
+    }));
+  };
+
+  const removeActivity = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      activities: prev.activities.filter(activity => activity.id !== id)
+    }));
+  };
+
   const handleSubmit = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -159,6 +200,7 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
           skills: formData.skills,
           interests: formData.interests,
           age: formData.age,
+          activities: formData.activities,
         })
         .eq('id', user.id);
 
@@ -178,7 +220,9 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
       onRequestClose={onClose}
       animationType="slide"
       transparent={true}>
-      <View style={styles.modalContainer}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.modalContainer}>
         <View style={styles.modalContent}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>プロフィール編集</Text>
@@ -187,7 +231,9 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.form}>
+          <ScrollView 
+            style={styles.form}
+            keyboardShouldPersistTaps="handled">
             <View style={styles.coverImageContainer}>
               {formData.coverUrl ? (
                 <Image source={{ uri: formData.coverUrl }} style={styles.coverImage} />
@@ -370,6 +416,59 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
               )}
             </View>
 
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>活動</Text>
+              {formData.activities.map((activity) => (
+                <View key={`activity-item-${activity.id}`} style={styles.activityContainer}>
+                  <View style={styles.activityHeader}>
+                    <Text style={styles.activityTitle}>活動情報</Text>
+                    <TouchableOpacity
+                      onPress={() => removeActivity(activity.id)}
+                      style={styles.removeActivityButton}>
+                      <X size={20} color="#ef4444" />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  <TextInput
+                    style={styles.input}
+                    value={activity.title}
+                    onChangeText={(text) => updateActivity(activity.id, 'title', text)}
+                    placeholder="活動タイトル"
+                  />
+                  
+                  <TextInput
+                    style={styles.input}
+                    value={activity.period}
+                    onChangeText={(text) => updateActivity(activity.id, 'period', text)}
+                    placeholder="活動期間（例：2022年4月 - 2023年3月）"
+                  />
+                  
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    value={activity.description}
+                    onChangeText={(text) => updateActivity(activity.id, 'description', text)}
+                    placeholder="活動内容"
+                    multiline
+                    numberOfLines={4}
+                  />
+                  
+                  <TextInput
+                    style={styles.input}
+                    value={activity.link}
+                    onChangeText={(text) => updateActivity(activity.id, 'link', text)}
+                    placeholder="関連リンク（任意）"
+                  />
+                </View>
+              ))}
+              
+              <TouchableOpacity
+                style={styles.addActivityButton}
+                onPress={addNewActivity}>
+                <Plus size={20} color="#6366f1" />
+                <Text style={styles.addActivityButtonText}>活動を追加</Text>
+              </TouchableOpacity>
+            </View>
+
             <TouchableOpacity
               style={styles.submitButton}
               onPress={handleSubmit}>
@@ -500,7 +599,7 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
             </View>
           </Modal>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -509,7 +608,6 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
   },
   modalContent: {
     backgroundColor: '#fff',
@@ -815,5 +913,45 @@ const styles = StyleSheet.create({
     backgroundColor: '#c7d2fe',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  activityContainer: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  activityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  activityTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  removeActivityButton: {
+    padding: 8,
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  addActivityButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#e0e7ff',
+    gap: 8,
+  },
+  addActivityButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#6366f1',
   },
 });

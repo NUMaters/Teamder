@@ -24,6 +24,13 @@ type Profile = {
   created_at: string;
   updated_at: string;
   age: number | null;
+  activities: {
+    id: string;
+    title: string;
+    period: string;
+    description: string;
+    link?: string;
+  }[] | null;
 };
 
 export default function ProfileScreen() {
@@ -151,7 +158,7 @@ export default function ProfileScreen() {
             })) || [],
             age: profile.age?.toString() || '',
             university: profile.university || '',
-            activities: [],
+            activities: profile.activities || [],
             certifications: []
           }}
           isOwnProfile={true}
@@ -167,7 +174,6 @@ export default function ProfileScreen() {
           name: profile.name || '',
           title: profile.title || '',
           university: profile.university || '',
-          department: profile.university || '',
           location: profile.location || '',
           githubUsername: profile.github_username || '',
           twitterUsername: profile.twitter_username || '',
@@ -176,6 +182,8 @@ export default function ProfileScreen() {
           coverUrl: profile.cover_url || '',
           skills: profile.skills || [],
           interests: profile.interests || [],
+          age: profile.age?.toString() || '',
+          activities: profile.activities || []
         }}
       />
     </View>

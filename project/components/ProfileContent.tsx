@@ -26,6 +26,14 @@ type Skill = {
   years: string;
 };
 
+type Activity = {
+  id: string;
+  title: string;
+  period: string;
+  description: string;
+  link?: string;
+};
+
 type ProfileData = {
   name: string;
   title: string;
@@ -41,7 +49,7 @@ type ProfileData = {
   skills: Skill[];
   age: string;
   university: string;
-  activities: string[];
+  activities: Activity[];
   certifications: string[];
 };
 
@@ -191,13 +199,21 @@ export default function ProfileContent({ profile, isOwnProfile, onEditPress }: P
         )}
       </View>
 
+      {/* 活動 */}
       {profile.activities && profile.activities.length > 0 && (
         <View style={styles.section}>
           {renderSectionHeader('活動')}
           <View style={styles.activitiesContainer}>
-            {profile.activities.map((activity: string, index: number) => (
-              <View key={index} style={styles.activityItem}>
-                <Text style={styles.activityText}>{activity}</Text>
+            {profile.activities.map((activity) => (
+              <View key={activity.id} style={styles.activityItem}>
+                <Text style={styles.activityTitle}>{activity.title}</Text>
+                <Text style={styles.activityPeriod}>{activity.period}</Text>
+                <Text style={styles.activityDescription}>{activity.description}</Text>
+                {activity.link && (
+                  <TouchableOpacity onPress={() => Linking.openURL(activity.link!)}>
+                    <Text style={[styles.activityLink, styles.link]}>{activity.link}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </View>
@@ -383,10 +399,26 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
   },
-  activityText: {
+  activityTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  activityPeriod: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 8,
+  },
+  activityDescription: {
     fontSize: 14,
     color: '#4b5563',
     lineHeight: 20,
+    marginBottom: 8,
+  },
+  activityLink: {
+    fontSize: 14,
+    color: '#6366f1',
   },
   certificationsContainer: {
     gap: 12,
