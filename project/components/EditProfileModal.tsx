@@ -16,6 +16,7 @@ type ProfileFormData = {
   coverUrl: string;
   skills: Array<{ name: string; years: string }>;
   interests: string[];
+  age: string;
 };
 
 interface EditProfileModalProps {
@@ -157,6 +158,7 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
           cover_url: formData.coverUrl,
           skills: formData.skills,
           interests: formData.interests,
+          age: formData.age,
         })
         .eq('id', user.id);
 
@@ -221,6 +223,17 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
                 value={formData.name}
                 onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
                 placeholder="フルネームを入力"
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>年齢</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.age}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, age: text }))}
+                placeholder="年齢を入力"
+                keyboardType="numeric"
               />
             </View>
 
