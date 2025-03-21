@@ -96,40 +96,41 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (!email || !password || !confirmPassword) {
-      setError('すべての項目を入力してください');
+      setError('すべての項目を入力してください。');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('パスワードが一致しません');
+      setError('パスワードが一致しません。');
       return;
     }
 
-    // パスワードポリシーのバリデーション
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    if (!passwordRegex.test(password)) {
-      setError('パスワードは以下の条件を満たす必要があります：\n・8文字以上\n・大文字を含む\n・小文字を含む\n・数字を含む\n・記号を含む（@$!%*?&）');
+    if (password.length < 8) {
+      setError('パスワードは8文字以上で入力してください。');
       return;
     }
+
+    setLoading(true);
+    setError(null);
 
     try {
-      setLoading(true);
-      setError(null);
-
-      const { error: signUpError, id_token: idToken } = await signup(email, password);
+      const result = await signup(email, password);
       
-      if (signUpError) {
-        throw signUpError;
+      if (result.error) {
+        setError(result.error.message);
+        return;
       }
 
-      if (idToken) {
-        // トークンを保存
-        await saveToken(idToken);
-        router.replace(`/profile/setup`);
+      if (result.id_token) {
+        await saveToken(result.id_token);
+        // トークンを保持したままプロフィール設定画面に遷移
+        router.push({
+          pathname: '/(auth)/setup',
+          params: { token: result.id_token }
+        });
       }
     } catch (error) {
-      console.error('Registration error:', error);
-      setError(error instanceof Error ? error.message : 'アカウントの作成に失敗しました。もう一度お試しください。');
+      setError('予期せぬエラーが発生しました。もう一度お試しください。');
     } finally {
       setLoading(false);
     }
