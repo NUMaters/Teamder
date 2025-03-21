@@ -4,10 +4,34 @@ import ProfileContent from './ProfileContent';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
+type Skill = {
+  name: string;
+  years: string;
+};
+
+type ProfileData = {
+  name: string;
+  title: string;
+  location: string;
+  email: string;
+  website: string;
+  image: string;
+  coverUrl: string;
+  bio: string;
+  githubUsername: string;
+  twitterUsername: string;
+  interests: string[];
+  skills: Skill[];
+  age: string;
+  university: string;
+  activities: string[];
+  certifications: string[];
+};
+
 interface ProfileModalProps {
   isVisible: boolean;
   onClose: () => void;
-  profileData: any;
+  profileData: ProfileData;
   isOwnProfile?: boolean;
 }
 
@@ -28,7 +52,7 @@ export default function ProfileModal({ isVisible, onClose, profileData, isOwnPro
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
             <X size={24} color="#6b7280" />
           </TouchableOpacity>
-          <ProfileContent profileData={profileData} isOwnProfile={isOwnProfile} />
+          <ProfileContent profile={profileData} isOwnProfile={isOwnProfile} />
         </View>
       </View>
     </Modal>

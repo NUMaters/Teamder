@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import React from 'react';
-import { View, Text, StyleSheet, Image, Dimensions, TouchableOpacity, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, Dimensions, TouchableOpacity, Platform, Alert, ScrollView } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import { Code as Code2, Briefcase, MapPin, Rocket, Users, Building2, CircleUser as UserCircle2, Plus, Calendar, Clock, CreditCard, SwitchCamera, RefreshCw, Heart, Star, Settings, ListTodo, RotateCcw } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -29,7 +29,7 @@ type Profile = {
   image_url: string;
   cover_url: string;
   bio: string;
-  school: string;
+  university: string;
   github_username: string;
   twitter_username: string;
   interests: string[];
@@ -59,7 +59,7 @@ type Project = {
   id: string;
   owner_id: string;
   title: string;
-  school: string;
+  university: string;
   image_url: string;
   location: string;
   description: string;
@@ -77,7 +77,7 @@ type CardData = Profile | Project;
 const CURRENT_USER_ID = 'current-user';
 
 const WINDOW_HEIGHT = Dimensions.get('window').height;
-const CARD_VERTICAL_MARGIN = 240;
+const CARD_VERTICAL_MARGIN = 340;
 const CARD_HEIGHT = WINDOW_HEIGHT - CARD_VERTICAL_MARGIN;
 
 export default function DiscoverScreen() {
@@ -308,64 +308,66 @@ export default function DiscoverScreen() {
           </View>
           {renderLikeIndicator(profile.likes)}
         </View>
-        <View style={styles.cardContent}>
-          <View style={styles.cardHeader}>
-            <View style={styles.headerLeft}>
-              <Text style={styles.name}>{profile.name}</Text>
-              <Text style={styles.title}>{profile.title}</Text>
+        <ScrollView style={styles.cardContentScrollView}>
+          <View style={styles.cardContent}>
+            <View style={styles.cardHeader}>
+              <View style={styles.headerLeft}>
+                <Text style={styles.name}>{profile.name}</Text>
+                <Text style={styles.title}>{profile.title}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.viewProfileButton}
+                onPress={() => handleViewProfile(profile)}>
+                <UserCircle2 size={24} color="#6366f1" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.viewProfileButton}
-              onPress={() => handleViewProfile(profile)}>
-              <UserCircle2 size={24} color="#6366f1" />
-            </TouchableOpacity>
-          </View>
 
-          <View style={styles.infoContainer}>
-            <View style={styles.infoRow}>
-              <MapPin size={16} color="#6b7280" />
-              <Text style={styles.infoText}>{profile.location}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Code2 size={16} color="#6b7280" />
-              <Text style={styles.infoText}>{profile.school}</Text>
-            </View>
-          </View>
-
-          <Text style={styles.bio} numberOfLines={3}>
-            {profile.bio}
-          </Text>
-
-          <View style={styles.skillsContainer}>
-            {profile.skills.map((skill, index) => {
-              let skillData;
-              try {
-                skillData = typeof skill === 'string' ? JSON.parse(skill) : skill;
-              } catch (e) {
-                skillData = { name: skill, years: '未設定' };
-              }
-              return (
-                <View key={index} style={styles.skillBadge}>
-                  <Text style={styles.skillText}>{skillData.name}</Text>
-                  <Text style={styles.skillYearsText}>{skillData.years}</Text>
-                </View>
-              );
-            })}
-          </View>
-
-          {profile.interests && profile.interests.length > 0 && (
-            <View style={styles.interestsContainer}>
-              <Text style={styles.interestsTitle}>興味のある分野</Text>
-              <View style={styles.interestsList}>
-                {profile.interests.map((interest, index) => (
-                  <View key={index} style={styles.interestBadge}>
-                    <Text style={styles.interestText}>{interest}</Text>
-                  </View>
-                ))}
+            <View style={styles.infoContainer}>
+              <View style={styles.infoRow}>
+                <MapPin size={16} color="#6b7280" />
+                <Text style={styles.infoText}>{profile.location}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Code2 size={16} color="#6b7280" />
+                <Text style={styles.infoText}>{profile.university}</Text>
               </View>
             </View>
-          )}
-        </View>
+
+            <Text style={styles.bio} numberOfLines={3}>
+              {profile.bio}
+            </Text>
+
+            <View style={styles.skillsContainer}>
+              {profile.skills.map((skill, index) => {
+                let skillData;
+                try {
+                  skillData = typeof skill === 'string' ? JSON.parse(skill) : skill;
+                } catch (e) {
+                  skillData = { name: skill, years: '未設定' };
+                }
+                return (
+                  <View key={index} style={styles.skillBadge}>
+                    <Text style={styles.skillText}>{skillData.name}</Text>
+                    <Text style={styles.skillYearsText}>{skillData.years}</Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            {profile.interests && profile.interests.length > 0 && (
+              <View style={styles.interestsContainer}>
+                <Text style={styles.interestsTitle}>興味のある分野</Text>
+                <View style={styles.interestsList}>
+                  {profile.interests.map((interest, index) => (
+                    <View key={index} style={styles.interestBadge}>
+                      <Text style={styles.interestText}>{interest}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        </ScrollView>
       </View>
     );
   };
@@ -374,7 +376,10 @@ export default function DiscoverScreen() {
     return (
       <View style={styles.card}>
         <View style={styles.imageContainer}>
-          <Image source={{ uri: project.image_url }} style={styles.cardImage} />
+          <Image 
+            source={{ uri: project.image_url || 'https://via.placeholder.com/400x300' }} 
+            style={styles.cardImage} 
+          />
           <View style={styles.imageOverlay}>
             <View style={styles.projectTypeBadge}>
               <Text style={styles.projectTypeText}>{project.status}</Text>
@@ -382,42 +387,44 @@ export default function DiscoverScreen() {
           </View>
           {renderLikeIndicator(project.likes)}
         </View>
-        <View style={styles.cardContent}>
-          <View style={styles.cardHeader}>
-            <View style={styles.headerLeft}>
-              <Text style={styles.name}>{project.title}</Text>
-              <Text style={styles.title}>{project.school}</Text>
+        <ScrollView style={styles.cardContentScrollView}>
+          <View style={styles.cardContent}>
+            <View style={styles.cardHeader}>
+              <View style={styles.headerLeft}>
+                <Text style={styles.name}>{project.title}</Text>
+                <Text style={styles.title}>{project.university}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.viewProfileButton}
+                onPress={() => handleViewProject(project)}>
+                <UserCircle2 size={24} color="#6366f1" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.viewProfileButton}
-              onPress={() => handleViewProject(project)}>
-              <UserCircle2 size={24} color="#6366f1" />
-            </TouchableOpacity>
-          </View>
 
-          <View style={styles.infoContainer}>
-            <View style={styles.infoRow}>
-              <MapPin size={16} color="#6b7280" />
-              <Text style={styles.infoText}>{project.location}</Text>
+            <View style={styles.infoContainer}>
+              <View style={styles.infoRow}>
+                <MapPin size={16} color="#6b7280" />
+                <Text style={styles.infoText}>{project.location}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Users size={16} color="#6b7280" />
+                <Text style={styles.infoText}>{project.team_size}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Clock size={16} color="#6b7280" />
+                <Text style={styles.infoText}>{project.duration}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <CreditCard size={16} color="#6b7280" />
+                <Text style={styles.infoText}>{project.budget}</Text>
+              </View>
             </View>
-            <View style={styles.infoRow}>
-              <Users size={16} color="#6b7280" />
-              <Text style={styles.infoText}>{project.team_size}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Clock size={16} color="#6b7280" />
-              <Text style={styles.infoText}>{project.duration}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <CreditCard size={16} color="#6b7280" />
-              <Text style={styles.infoText}>{project.budget}</Text>
-            </View>
-          </View>
 
-          <Text style={styles.bio} numberOfLines={3}>
-            {project.description}
-          </Text>
-        </View>
+            <Text style={styles.bio} numberOfLines={3}>
+              {project.description}
+            </Text>
+          </View>
+        </ScrollView>
       </View>
     );
   };
@@ -618,46 +625,23 @@ export default function DiscoverScreen() {
             email: selectedProfile.email,
             website: selectedProfile.website,
             image: selectedProfile.image_url,
+            coverUrl: selectedProfile.cover_url || '',
             bio: selectedProfile.bio,
-            academic: {
-              university: selectedProfile.school,
-              faculty: '',
-              department: '',
-              grade: '',
-              researchLab: '',
-              advisor: '',
-              gpa: '',
-            },
-            skills: selectedProfile.skills.map(name => ({ name, level: '中級' })),
-            interests: selectedProfile.interests,
-            languages: [
-              { name: '日本語', level: 'ネイティブ' },
-              { name: '英語', level: 'ビジネスレベル' }
-            ],
-            achievements: {
-              githubContributions: 100,
-              projectsCompleted: 5,
-              hackathonsWon: 1,
-              papers: 0
-            },
-            activities: [
-              {
-                id: '1',
-                title: 'プログラミングサークル',
-                organization: 'Tech Club',
-                period: '2023年4月 - 現在',
-                description: '週1回の勉強会を企画・運営'
+            githubUsername: selectedProfile.github_username,
+            twitterUsername: selectedProfile.twitter_username,
+            interests: selectedProfile.interests || [],
+            skills: selectedProfile.skills.map(skill => {
+              try {
+                const skillData = typeof skill === 'string' ? JSON.parse(skill) : skill;
+                return { name: skillData.name, years: skillData.years };
+              } catch (e) {
+                return { name: skill, years: '未設定' };
               }
-            ],
-            coursework: [
-              'プログラミング基礎',
-              'アルゴリズムとデータ構造',
-              'データベース'
-            ],
-            certifications: [
-              '基本情報技術者',
-              'AWS Certified Cloud Practitioner'
-            ]
+            }),
+            age: String(selectedProfile.age),
+            university: selectedProfile.university,
+            activities: [],
+            certifications: []
           }}
           isOwnProfile={false}
         />
@@ -770,7 +754,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 24,
-    height: '100%',
+    height: CARD_HEIGHT,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#e5e7eb',
@@ -782,12 +766,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
-    maxHeight: 500,
   },
   imageContainer: {
     position: 'relative',
     width: '100%',
-    height: '50%',
+    height: 200,
   },
   cardImage: {
     width: '100%',
@@ -823,6 +806,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  cardContentScrollView: {
+    flex: 1,
   },
   cardContent: {
     padding: 16,

@@ -12,7 +12,7 @@ type Project = {
   id: string;
   owner_id: string;
   title: string;
-  school: string;
+  university: string;
   image_url: string;
   location: string;
   description: string;
@@ -50,7 +50,7 @@ export default function ProjectModal({ isVisible, onClose, project }: ProjectMod
 
             <View style={styles.content}>
               <Text style={styles.title}>{project.title}</Text>
-              <Text style={styles.school}>{project.school}</Text>
+              <Text style={styles.school}>{project.university}</Text>
 
               <View style={styles.infoContainer}>
                 <View style={styles.infoRow}>
