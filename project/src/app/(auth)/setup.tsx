@@ -208,18 +208,6 @@ export default function SetupScreen() {
       setError('場所を入力してください');
       return false;
     }
-    if (!formData.bio.trim()) {
-      setError('自己紹介を入力してください');
-      return false;
-    }
-    if (formData.skills.length === 0) {
-      setError('スキルを1つ以上選択してください');
-      return false;
-    }
-    if (formData.interests.length === 0) {
-      setError('興味のある分野を1つ以上選択してください');
-      return false;
-    }
     return true;
   };
 
