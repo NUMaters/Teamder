@@ -1,8 +1,22 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Image, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Image } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Mail, Lock, ArrowLeft } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { Mail, Lock, ArrowRight } from 'lucide-react-native';
+import axios from 'axios';
+import * as FileSystem from 'expo-file-system';
+
+// 環境変数の型定義
+const AWS_REGION = process.env.EXPO_PUBLIC_AWS_REGION;
+const COGNITO_USER_POOL_ID = process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID;
+const COGNITO_CLIENT_ID = process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID;
+const API_GATEWAY_URL = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
+const API_KEY = process.env.EXPO_PUBLIC_API_KEY;
+const AUTH_TOKEN = process.env.EXPO_PUBLIC_AUTH_TOKEN;
+
+// 環境変数の検証
+if (!AWS_REGION || !COGNITO_USER_POOL_ID || !COGNITO_CLIENT_ID || !API_GATEWAY_URL || !API_KEY || !AUTH_TOKEN) {
+  throw new Error('必要な環境変数が設定されていません。');
+}
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -11,6 +25,74 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [focusedInput, setFocusedInput] = useState<'email' | 'password' | 'confirmPassword' | null>(null);
+
+  const saveToken = async (id_token: string) => {
+    try {
+      const fileUri = `${FileSystem.documentDirectory}token.txt`;
+      await FileSystem.writeAsStringAsync(fileUri, id_token, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      console.log("トークンを保存しました:", fileUri);
+    } catch (error) {
+      console.error("トークンの保存に失敗しました:", error);
+      throw new Error('トークンの保存に失敗しました');
+    }
+  };
+
+  async function signup(email: string, password: string) {
+    try {
+      // API Gatewayにリクエストを送信
+      const apiResponse = await axios.post(
+        `${API_GATEWAY_URL}/register`,
+        {
+          email,
+          password,
+          client_id: COGNITO_CLIENT_ID
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY,
+            'Authorization': `Bearer ${AUTH_TOKEN}`
+          }
+        }
+      );
+
+      console.log('API Response:', apiResponse.data);
+      
+      if (apiResponse.data && apiResponse.data.id_token) {
+        return { id_token: apiResponse.data.id_token };
+      } else {
+        return { error: new Error('トークンの取得に失敗しました') };
+      }
+    } catch (error) {
+      console.error("登録失敗:", error);
+      if (axios.isAxiosError(error)) {
+        console.error('Error response:', error.response?.data);
+        
+        // エラーレスポンスの詳細を取得
+        const errorData = error.response?.data;
+        const errorMessage = errorData?.message || errorData?.error || '予期せぬエラーが発生しました';
+        
+        switch (error.response?.status) {
+          case 500:
+            return { error: new Error(`サーバーエラー: ${errorMessage}`) };
+          case 400:
+            return { error: new Error(`入力エラー: ${errorMessage}`) };
+          case 409:
+            return { error: new Error('このメールアドレスは既に登録されています。') };
+          case 403:
+            return { error: new Error('アクセスが拒否されました。APIキーまたは認証トークンが正しくありません。') };
+          case 404:
+            return { error: new Error('APIエンドポイントが見つかりません。') };
+          default:
+            return { error: new Error(`エラー: ${errorMessage}`) };
+        }
+      }
+      return { error: new Error('予期せぬエラーが発生しました。もう一度お試しください。') };
+    }
+  }
 
   const handleRegister = async () => {
     if (!email || !password || !confirmPassword) {
@@ -23,8 +105,10 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('パスワードは6文字以上で入力してください');
+    // パスワードポリシーのバリデーション
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(password)) {
+      setError('パスワードは以下の条件を満たす必要があります：\n・8文字以上\n・大文字を含む\n・小文字を含む\n・数字を含む\n・記号を含む（@$!%*?&）');
       return;
     }
 
@@ -32,53 +116,16 @@ export default function RegisterScreen() {
       setLoading(true);
       setError(null);
 
-      const { error: signUpError, data: { user } } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
+      const { error: signUpError, id_token: idToken } = await signup(email, password);
+      
       if (signUpError) {
-        if (signUpError.message.includes('already registered')) {
-          throw new Error('このメールアドレスは既に登録されています');
-        }
         throw signUpError;
       }
 
-      if (user) {
-        // プロフィールが既に存在するか確認
-        const { data: existingProfile, error: fetchError } = await supabase
-          .from('profiles')
-          .select()
-          .eq('id', user.id)
-          .single();
-
-        if (fetchError && fetchError.code !== 'PGRST116') {
-          console.error('Profile fetch error:', fetchError);
-          throw new Error(`プロフィールの確認に失敗しました: ${fetchError.message}`);
-        }
-
-        const profileData = {
-          id: user.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        const { error: profileError } = existingProfile
-          ? await supabase
-              .from('profiles')
-              .update(profileData)
-              .eq('id', user.id)
-          : await supabase
-              .from('profiles')
-              .insert([profileData]);
-
-        if (profileError) {
-          console.error('Profile creation error:', profileError);
-          throw new Error(`プロフィールの作成に失敗しました: ${profileError.message}`);
-        }
-
-        // Redirect to profile setup
-        router.replace('/profile/setup');
+      if (idToken) {
+        // トークンを保存
+        await saveToken(idToken);
+        router.replace(`/profile/setup`);
       }
     } catch (error) {
       console.error('Registration error:', error);
@@ -89,22 +136,17 @@ export default function RegisterScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <View style={styles.container}>
       <View style={styles.header}>
         <Image
-          source={{ uri: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800' }}
+          source={{ uri: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800' }}
           style={styles.headerImage}
         />
         <View style={styles.overlay} />
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}>
-          <ArrowLeft size={24} color="#fff" />
-        </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.title}>新規登録</Text>
           <Text style={styles.subtitle}>
-            エンジニアとして登録
+            エンジニアとプロジェクトをマッチング
           </Text>
         </View>
       </View>
@@ -116,44 +158,64 @@ export default function RegisterScreen() {
           </View>
         )}
 
-        <View style={styles.inputContainer}>
+        <View style={[
+          styles.inputContainer,
+          focusedInput === 'email' && styles.inputFocused
+        ]}>
           <Mail size={20} color="#6b7280" />
           <TextInput
             style={styles.input}
             placeholder="メールアドレス"
             value={email}
             onChangeText={setEmail}
+            onFocus={() => setFocusedInput('email')}
+            onBlur={() => setFocusedInput(null)}
             autoCapitalize="none"
             keyboardType="email-address"
             editable={!loading}
           />
         </View>
 
-        <View style={styles.inputContainer}>
+        <View style={[
+          styles.inputContainer,
+          focusedInput === 'password' && styles.inputFocused
+        ]}>
           <Lock size={20} color="#6b7280" />
           <TextInput
             style={styles.input}
             placeholder="パスワード"
             value={password}
             onChangeText={setPassword}
+            onFocus={() => setFocusedInput('password')}
+            onBlur={() => setFocusedInput(null)}
             secureTextEntry
             editable={!loading}
-            autoComplete="off"
-            textContentType="none" // 自動強力パスワード提案を無効化
           />
         </View>
 
-        <View style={styles.inputContainer}>
+        <View style={styles.passwordPolicy}>
+          <Text style={styles.passwordPolicyTitle}>パスワードの要件：</Text>
+          <Text style={styles.passwordPolicyText}>・8文字以上</Text>
+          <Text style={styles.passwordPolicyText}>・大文字を含む</Text>
+          <Text style={styles.passwordPolicyText}>・小文字を含む</Text>
+          <Text style={styles.passwordPolicyText}>・数字を含む</Text>
+          <Text style={styles.passwordPolicyText}>・記号を含む（@$!%*?&）</Text>
+        </View>
+
+        <View style={[
+          styles.inputContainer,
+          focusedInput === 'confirmPassword' && styles.inputFocused
+        ]}>
           <Lock size={20} color="#6b7280" />
           <TextInput
             style={styles.input}
             placeholder="パスワード（確認）"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
+            onFocus={() => setFocusedInput('confirmPassword')}
+            onBlur={() => setFocusedInput(null)}
             secureTextEntry
             editable={!loading}
-            autoComplete="off"
-            textContentType="none" // 自動強力パスワード提案を無効化
           />
         </View>
 
@@ -162,7 +224,7 @@ export default function RegisterScreen() {
           onPress={handleRegister}
           disabled={loading}>
           <Text style={styles.buttonText}>
-            {loading ? '登録中...' : 'アカウントを作成'}
+            {loading ? '登録中...' : '新規登録'}
           </Text>
         </TouchableOpacity>
 
@@ -172,10 +234,10 @@ export default function RegisterScreen() {
           <Text style={styles.loginButtonText}>
             すでにアカウントをお持ちの方
           </Text>
-          <ArrowLeft size={16} color="#6366f1" />
+          <ArrowRight size={16} color="#6366f1" />
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -195,17 +257,6 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(79, 70, 229, 0.4)',
-  },
-  backButton: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 20,
-    left: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   headerContent: {
     position: 'absolute',
@@ -252,6 +303,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#e5e7eb',
+  },
+  inputFocused: {
+    borderColor: '#6366f1',
+    backgroundColor: '#fff',
   },
   input: {
     flex: 1,
@@ -300,5 +355,22 @@ const styles = StyleSheet.create({
     color: '#6366f1',
     fontSize: 14,
     fontWeight: '500',
+  },
+  passwordPolicy: {
+    backgroundColor: '#f3f4f6',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  passwordPolicyTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  passwordPolicyText: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginLeft: 8,
   },
 });

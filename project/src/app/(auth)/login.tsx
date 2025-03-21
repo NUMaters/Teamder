@@ -1,8 +1,22 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Mail, Lock, ArrowRight } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import axios from 'axios';
+import * as FileSystem from 'expo-file-system';
+
+// 環境変数の型定義
+const AWS_REGION = process.env.EXPO_PUBLIC_AWS_REGION;
+const COGNITO_USER_POOL_ID = process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID;
+const COGNITO_CLIENT_ID = process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID;
+const API_GATEWAY_URL = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
+const API_KEY = process.env.EXPO_PUBLIC_API_KEY;
+const AUTH_TOKEN = process.env.EXPO_PUBLIC_AUTH_TOKEN;
+
+// 環境変数の検証
+if (!AWS_REGION || !COGNITO_USER_POOL_ID || !COGNITO_CLIENT_ID || !API_GATEWAY_URL || !API_KEY || !AUTH_TOKEN) {
+  throw new Error('必要な環境変数が設定されていません。');
+}
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -10,10 +24,78 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [focusedInput, setFocusedInput] = useState<'email' | 'password' | null>(null);
+
+  const saveToken = async (id_token: string) => {
+    try {
+      const fileUri = `${FileSystem.documentDirectory}token.txt`;
+      await FileSystem.writeAsStringAsync(fileUri, id_token, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      console.log("トークンを保存しました:", fileUri);
+    } catch (error) {
+      console.error("トークンの保存に失敗しました:", error);
+      throw new Error('トークンの保存に失敗しました');
+    }
+  };
+
+  async function login(email: string, password: string) {
+    try {
+      // API Gatewayにリクエストを送信
+      const apiResponse = await axios.post(
+        `${API_GATEWAY_URL}/login`,
+        {
+          email,
+          password,
+          client_id: COGNITO_CLIENT_ID
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY,
+            'Authorization': `Bearer ${AUTH_TOKEN}`
+          }
+        }
+      );
+
+      console.log('API Response:', apiResponse.data);
+      
+      if (apiResponse.data && apiResponse.data.id_token) {
+        return { id_token: apiResponse.data.id_token };
+      } else {
+        return { error: new Error('トークンの取得に失敗しました') };
+      }
+    } catch (error) {
+      console.error("ログイン失敗:", error);
+      if (axios.isAxiosError(error)) {
+        console.error('Error response:', error.response?.data);
+        
+        // エラーレスポンスの詳細を取得
+        const errorData = error.response?.data;
+        const errorMessage = errorData?.message || errorData?.error || '予期せぬエラーが発生しました';
+        
+        switch (error.response?.status) {
+          case 500:
+            return { error: new Error(`サーバーエラー: ${errorMessage}`) };
+          case 400:
+            return { error: new Error(`入力エラー: ${errorMessage}`) };
+          case 401:
+            return { error: new Error('メールアドレスまたはパスワードが正しくありません。') };
+          case 403:
+            return { error: new Error('アクセスが拒否されました。APIキーまたは認証トークンが正しくありません。') };
+          case 404:
+            return { error: new Error('APIエンドポイントが見つかりません。') };
+          default:
+            return { error: new Error(`エラー: ${errorMessage}`) };
+        }
+      }
+      return { error: new Error('予期せぬエラーが発生しました。もう一度お試しください。') };
+    }
+  }
 
   const handleLogin = async () => {
     if (!email || !password) {
-      setError('メールアドレスとパスワードを入力してください');
+      setError('すべての項目を入力してください');
       return;
     }
 
@@ -21,33 +103,16 @@ export default function LoginScreen() {
       setLoading(true);
       setError(null);
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (signInError) {
-        if (signInError.message.includes('Invalid login credentials')) {
-          throw new Error('メールアドレスまたはパスワードが正しくありません');
-        }
-        throw signInError;
+      const { error: loginError, id_token: idToken } = await login(email, password);
+      
+      if (loginError) {
+        throw loginError;
       }
 
-      // Get user profile to check if setup is complete
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('name')
-          .eq('id', user.id)
-          .single();
-
-        // If profile is not set up, redirect to setup
-        if (!profile?.name) {
-          router.replace('/profile/setup');
-        } else {
-          router.replace('/(tabs)');
-        }
+      if (idToken) {
+        // トークンを保存
+        await saveToken(idToken);
+        router.replace(`/(tabs)`);
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -80,26 +145,36 @@ export default function LoginScreen() {
           </View>
         )}
 
-        <View style={styles.inputContainer}>
+        <View style={[
+          styles.inputContainer,
+          focusedInput === 'email' && styles.inputFocused
+        ]}>
           <Mail size={20} color="#6b7280" />
           <TextInput
             style={styles.input}
             placeholder="メールアドレス"
             value={email}
             onChangeText={setEmail}
+            onFocus={() => setFocusedInput('email')}
+            onBlur={() => setFocusedInput(null)}
             autoCapitalize="none"
             keyboardType="email-address"
             editable={!loading}
           />
         </View>
 
-        <View style={styles.inputContainer}>
+        <View style={[
+          styles.inputContainer,
+          focusedInput === 'password' && styles.inputFocused
+        ]}>
           <Lock size={20} color="#6b7280" />
           <TextInput
             style={styles.input}
             placeholder="パスワード"
             value={password}
             onChangeText={setPassword}
+            onFocus={() => setFocusedInput('password')}
+            onBlur={() => setFocusedInput(null)}
             secureTextEntry
             editable={!loading}
           />
@@ -189,6 +264,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#e5e7eb',
+  },
+  inputFocused: {
+    borderColor: '#6366f1',
+    backgroundColor: '#fff',
   },
   input: {
     flex: 1,
