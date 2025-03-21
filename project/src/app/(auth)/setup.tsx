@@ -259,7 +259,11 @@ export default function SetupScreen() {
       );
 
       if (apiResponse.data.success) {
-        router.replace('/(tabs)/index');
+        //router.replace('/(tabs)/index');
+        router.push({
+          pathname: '/(tabs)',
+          params: { token: token }
+        });
       } else {
         throw new Error('プロフィールの設定に失敗しました');
       }

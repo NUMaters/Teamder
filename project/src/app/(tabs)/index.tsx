@@ -3,13 +3,16 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, Dimensions, TouchableOpacity, Platform, Alert, ScrollView } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import { Code as Code2, Briefcase, MapPin, Rocket, Users, Building2, CircleUser as UserCircle2, Plus, Calendar, Clock, CreditCard, SwitchCamera, RefreshCw, Heart, Star, Settings, ListTodo, RotateCcw } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { withSpring, withTiming, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import ProfileModal from '@/components/ProfileModal';
 import ProjectModal from '@/components/ProjectModal';
 import CreateProjectModal from '@/components/CreateProjectModal';
 import type { ProjectFormData } from '@/components/CreateProjectModal';
 import { supabase } from '@/lib/supabase';
+import axios from 'axios';
+
+const API_GATEWAY_URL = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
 
 type Category = 'engineers' | 'projects';
 type LikeType = 'like' | 'superlike';
@@ -82,6 +85,7 @@ const CARD_HEIGHT = WINDOW_HEIGHT - CARD_VERTICAL_MARGIN;
 
 export default function DiscoverScreen() {
   const router = useRouter();
+  const { token } = useLocalSearchParams();
   const [category, setCategory] = useState<Category>('engineers');
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -108,9 +112,23 @@ export default function DiscoverScreen() {
   const fetchProfiles = async () => {
     try {
       setIsLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const apiResponse = await axios.post(
+        `${API_GATEWAY_URL}/get_username`,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      if(apiResponse.data.error){
+        return
+      }
+      //const { data: { user } } = await supabase.auth.getUser();
+      //if (!user) return;
 
+      /*
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -120,9 +138,10 @@ export default function DiscoverScreen() {
       if (error) {
         throw error;
       }
+      */
 
-      if (data) {
-        const formattedProfiles: Profile[] = data.map(profile => ({
+      if (apiResponse.data) {
+        const formattedProfiles: Profile[] = apiResponse.data.map(profile => ({
           id: profile.id,
           name: profile.name,
           title: profile.title,
