@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Platform, Alert, KeyboardAvoidingView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Save, X, MapPin, Users, Clock, CreditCard, Plus, Trash2, Upload } from 'lucide-react-native';
@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 type Project = {
   id: string;
   title: string;
-  company: string;
+  university: string;
   image: string;
   location: string;
   description: string;
@@ -76,45 +76,24 @@ export default function ProjectDetailsScreen() {
 
   const fetchProject = async () => {
     try {
-      console.log('Fetching project with ID:', id);
+      setLoading(true);
       const { data, error } = await supabase
         .from('projects')
-        .select('*')
+        .select(`
+          *,
+          profiles:user_id (
+            name,
+            avatar_url
+          )
+        `)
         .eq('id', id)
         .single();
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
-
-      if (!data) {
-        console.error('No project found with ID:', id);
-        throw new Error('プロジェクトが見つかりません');
-      }
-
-      console.log('Fetched project data:', data);
-
-      // データベースのカラム名をコンポーネントのプロパティ名に変換
-      const projectData = {
-        id: data.id,
-        title: data.title,
-        company: data.company,
-        image: data.image_url || '',
-        location: data.location || '',
-        description: data.description || '',
-        teamSize: data.team_size || '',
-        duration: data.duration || '',
-        budget: data.budget || '',
-        skills: data.skills || [],
-        status: data.status || 'active',
-      };
-
-      console.log('Transformed project data:', projectData);
-      setProject(projectData);
+      if (error) throw error;
+      setProject(data);
     } catch (error) {
       console.error('Error fetching project:', error);
-      Alert.alert('エラー', 'プロジェクトの取得に失敗しました。');
+      Alert.alert('エラー', 'プロジェクトの取得に失敗しました');
     } finally {
       setLoading(false);
     }
@@ -128,7 +107,7 @@ export default function ProjectDetailsScreen() {
         .from('projects')
         .update({
           title: project.title,
-          company: project.company,
+          university: project.university,
           image_url: project.image,
           location: project.location,
           description: project.description,
@@ -350,16 +329,16 @@ export default function ProjectDetailsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.label}>会社名</Text>
+          <Text style={styles.label}>大学名</Text>
           {isEditing ? (
             <TextInput
               style={styles.input}
-              value={project.company}
-              onChangeText={(text) => setProject({ ...project, company: text })}
-              placeholder="会社名を入力"
+              value={project.university}
+              onChangeText={(text) => setProject({ ...project, university: text })}
+              placeholder="大学名を入力"
             />
           ) : (
-            <Text style={styles.value}>{project.company}</Text>
+            <Text style={styles.value}>{project.university}</Text>
           )}
         </View>
 

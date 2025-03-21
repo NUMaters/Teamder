@@ -87,10 +87,8 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: type === 'profile' ? [1, 1] : [16, 9],
+        aspect: [1, 1],
         quality: 1,
-        selectionLimit: 1,
-        presentationStyle: Platform.OS === 'ios' ? 'pageSheet' : undefined,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {

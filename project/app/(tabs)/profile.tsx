@@ -5,7 +5,26 @@ import { LogOut } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import ProfileContent from '@/components/ProfileContent';
 import EditProfileModal from '@/components/EditProfileModal';
-import type { Profile } from '../../components/ProfileCard';
+
+type Profile = {
+  id: string;
+  name: string | null;
+  title: string | null;
+  location: string | null;
+  email: string | null;
+  website: string | null;
+  image_url: string | null;
+  cover_url: string | null;
+  bio: string | null;
+  university: string | null;
+  github_username: string | null;
+  twitter_username: string | null;
+  interests: string[] | null;
+  skills: { name: string; years: string }[] | null;
+  created_at: string;
+  updated_at: string;
+  age: number | null;
+};
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -15,8 +34,12 @@ export default function ProfileScreen() {
 
   const fetchProfile = async () => {
     try {
+      setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('ユーザーが見つかりません');
+      
+      if (!user) {
+        throw new Error('ユーザー情報が見つかりません');
+      }
 
       const { data, error } = await supabase
         .from('profiles')
@@ -24,10 +47,26 @@ export default function ProfileScreen() {
         .eq('id', user.id)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('プロフィール取得エラー:', error);
+        // エラーが発生した場合、ログアウトを実行
+        await supabase.auth.signOut();
+        router.replace('/(auth)/login');
+        return;
+      }
+
+      if (!data) {
+        throw new Error('プロフィールが見つかりません');
+      }
+
       setProfile(data);
     } catch (error) {
       console.error('プロフィール取得エラー:', error);
+      // エラーが発生した場合、ログアウトを実行
+      await supabase.auth.signOut();
+      router.replace('/(auth)/login');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -93,10 +132,30 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView style={styles.content}>
-        <ProfileContent 
-          profileData={profile} 
-          isOwnProfile={true} 
-          onEdit={() => setIsEditModalVisible(true)} 
+        <ProfileContent
+          profile={{
+            name: profile.name || '',
+            title: profile.title || '',
+            location: profile.location || '',
+            email: profile.email || '',
+            website: profile.website || '',
+            image: profile.image_url || '',
+            coverUrl: profile.cover_url || '',
+            bio: profile.bio || '',
+            githubUsername: profile.github_username || '',
+            twitterUsername: profile.twitter_username || '',
+            interests: profile.interests || [],
+            skills: profile.skills?.map(skill => ({
+              name: skill.name,
+              years: skill.years
+            })) || [],
+            age: profile.age?.toString() || '',
+            university: profile.university || '',
+            activities: [],
+            certifications: []
+          }}
+          isOwnProfile={true}
+          onEditPress={() => setIsEditModalVisible(true)}
         />
       </ScrollView>
 
@@ -105,16 +164,16 @@ export default function ProfileScreen() {
         onClose={() => setIsEditModalVisible(false)}
         onUpdate={handleProfileUpdate}
         initialData={{
-          name: profile.name,
-          title: profile.title,
-          university: profile.university,
-          department: profile.department,
-          location: profile.location,
-          githubUsername: profile.github_username,
-          twitterUsername: profile.twitter_username,
-          bio: profile.bio,
-          imageUrl: profile.image_url,
-          coverUrl: profile.cover_url,
+          name: profile.name || '',
+          title: profile.title || '',
+          university: profile.university || '',
+          department: profile.university || '',
+          location: profile.location || '',
+          githubUsername: profile.github_username || '',
+          twitterUsername: profile.twitter_username || '',
+          bio: profile.bio || '',
+          imageUrl: profile.image_url || '',
+          coverUrl: profile.cover_url || '',
           skills: profile.skills || [],
           interests: profile.interests || [],
         }}

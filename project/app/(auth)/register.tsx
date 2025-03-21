@@ -4,14 +4,11 @@ import { useRouter } from 'expo-router';
 import { Mail, Lock, ArrowLeft } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 
-type UserType = 'engineer' | 'recruiter';
-
 export default function RegisterScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [userType, setUserType] = useState<UserType>('engineer');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,18 +45,40 @@ export default function RegisterScreen() {
       }
 
       if (user) {
-        // Update the user's profile with type
-        const { error: updateError } = await supabase
+        // プロフィールが既に存在するか確認
+        const { data: existingProfile, error: fetchError } = await supabase
           .from('profiles')
-          .update({ type: userType })
-          .eq('id', user.id);
+          .select()
+          .eq('id', user.id)
+          .single();
 
-        if (updateError) {
-          throw updateError;
+        if (fetchError && fetchError.code !== 'PGRST116') {
+          console.error('Profile fetch error:', fetchError);
+          throw new Error(`プロフィールの確認に失敗しました: ${fetchError.message}`);
+        }
+
+        const profileData = {
+          id: user.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: profileError } = existingProfile
+          ? await supabase
+              .from('profiles')
+              .update(profileData)
+              .eq('id', user.id)
+          : await supabase
+              .from('profiles')
+              .insert([profileData]);
+
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+          throw new Error(`プロフィールの作成に失敗しました: ${profileError.message}`);
         }
 
         // Redirect to profile setup
-        router.replace(`/profile/setup`);
+        router.replace('/profile/setup');
       }
     } catch (error) {
       console.error('Registration error:', error);
@@ -85,7 +104,7 @@ export default function RegisterScreen() {
         <View style={styles.headerContent}>
           <Text style={styles.title}>新規登録</Text>
           <Text style={styles.subtitle}>
-            エンジニアとして登録、またはプロジェクトを掲載
+            エンジニアとして登録
           </Text>
         </View>
       </View>
@@ -96,31 +115,6 @@ export default function RegisterScreen() {
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
-
-        <View style={styles.userTypeContainer}>
-          <TouchableOpacity
-            style={[
-              styles.userTypeButton,
-              userType === 'engineer' && styles.userTypeButtonActive
-            ]}
-            onPress={() => setUserType('engineer')}>
-            <Text style={[
-              styles.userTypeText,
-              userType === 'engineer' && styles.userTypeTextActive
-            ]}>エンジニア</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.userTypeButton,
-              userType === 'recruiter' && styles.userTypeButtonActive
-            ]}
-            onPress={() => setUserType('recruiter')}>
-            <Text style={[
-              styles.userTypeText,
-              userType === 'recruiter' && styles.userTypeTextActive
-            ]}>採用担当者</Text>
-          </TouchableOpacity>
-        </View>
 
         <View style={styles.inputContainer}>
           <Mail size={20} color="#6b7280" />
@@ -144,6 +138,8 @@ export default function RegisterScreen() {
             onChangeText={setPassword}
             secureTextEntry
             editable={!loading}
+            autoComplete="off"
+            textContentType="none" // 自動強力パスワード提案を無効化
           />
         </View>
 
@@ -156,6 +152,8 @@ export default function RegisterScreen() {
             onChangeText={setConfirmPassword}
             secureTextEntry
             editable={!loading}
+            autoComplete="off"
+            textContentType="none" // 自動強力パスワード提案を無効化
           />
         </View>
 
@@ -234,29 +232,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-  },
-  userTypeContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-  },
-  userTypeButton: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  userTypeButtonActive: {
-    backgroundColor: '#6366f1',
-  },
-  userTypeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  userTypeTextActive: {
-    color: '#ffffff',
   },
   errorContainer: {
     backgroundColor: '#fee2e2',

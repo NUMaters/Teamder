@@ -7,6 +7,20 @@ import { supabase } from '@/lib/supabase';
 
 type ProjectStatus = 'active' | 'paused' | 'completed';
 
+type Project = {
+  id: string;
+  title: string;
+  university: string;
+  image: string;
+  location: string;
+  description: string;
+  teamSize: string;
+  duration: string;
+  budget: string;
+  skills: string[];
+  status: string;
+};
+
 export default function ManageProjectsScreen() {
   const router = useRouter();
   const [projects, setProjects] = useState<any[]>([]);
@@ -23,43 +37,28 @@ export default function ManageProjectsScreen() {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('ユーザーが見つかりません');
-
-      console.log('Fetching projects for user:', user.id);
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('owner_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
+      
+      if (!user) {
+        throw new Error('ユーザーが見つかりません');
       }
 
-      console.log('Fetched projects:', data);
+      const { data, error } = await supabase
+        .from('projects')
+        .select(`
+          *,
+          profiles:user_id (
+            name,
+            avatar_url
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
 
-      // データベースのカラム名をコンポーネントのプロパティ名に変換
-      const projects = data.map(project => ({
-        id: project.id,
-        title: project.title,
-        company: project.company,
-        image: project.image_url || '',
-        location: project.location || '',
-        description: project.description || '',
-        teamSize: project.team_size || '',
-        duration: project.duration || '',
-        budget: project.budget || '',
-        skills: project.skills || [],
-        status: project.status || 'active',
-        created_at: project.created_at,
-      }));
-
-      console.log('Transformed projects:', projects);
-      setProjects(projects);
+      if (error) throw error;
+      setProjects(data || []);
     } catch (error) {
       console.error('Error fetching projects:', error);
-      Alert.alert('エラー', 'プロジェクトの取得に失敗しました。');
+      Alert.alert('エラー', 'プロジェクトの取得に失敗しました');
     } finally {
       setLoading(false);
     }
@@ -176,7 +175,7 @@ export default function ManageProjectsScreen() {
                 <Image source={{ uri: project.image }} style={styles.projectImage} />
                 <View style={styles.projectHeaderContent}>
                   <Text style={styles.projectTitle}>{project.title}</Text>
-                  <Text style={styles.companyName}>{project.company}</Text>
+                  <Text style={styles.universityName}>{project.university}</Text>
                   <TouchableOpacity
                     style={[styles.statusBadge, getStatusStyle(project.status)]}
                     onPress={() => setShowStatusMenu(project.id)}>
@@ -366,7 +365,7 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     marginBottom: 4,
   },
-  companyName: {
+  universityName: {
     fontSize: 14,
     color: '#6b7280',
     marginBottom: 8,

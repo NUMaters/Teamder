@@ -4,25 +4,32 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { MessageCircle } from 'lucide-react-native';
 
-interface Match {
+type User = {
   id: string;
-  user: {
-    id: string;
-    name: string;
-    avatar_url: string;
-  };
-  project: {
-    id: string;
-    title: string;
-    company: string;
-    image_url: string;
-  };
-  chat_room: {
-    id: string;
-    last_message: string;
-    last_message_at: string;
-  };
-}
+  name: string;
+  avatar_url: string;
+};
+
+type Project = {
+  id: string;
+  title: string;
+  company: string;
+  image_url: string;
+  owner_id: string;
+};
+
+type ChatRoom = {
+  id: string;
+  last_message: string;
+  last_message_at: string;
+};
+
+type Match = {
+  id: string;
+  user: User;
+  project: Project;
+  chat_room: ChatRoom;
+};
 
 export default function MatchesScreen() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -38,54 +45,27 @@ export default function MatchesScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabase
+      const { data: matchesData, error } = await supabase
         .from('matches')
         .select(`
           id,
-          project_id,
-          user1_id,
-          user2_id,
-          status,
-          chat_rooms (
-            id,
-            last_message,
-            last_message_at
-          ),
-          projects (
-            id,
-            title,
-            company,
-            image_url,
-            owner_id
-          )
+          user:user2_id(id, name, avatar_url),
+          project:project_id(id, title, company, image_url, owner_id),
+          chat_room:chat_rooms(id, last_message, last_message_at)
         `)
-        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
-        .eq('status', 'active');
+        .eq('user1_id', user?.id);
 
       if (error) throw error;
 
-      // マッチした相手のユーザー情報を取得
-      const matchedUsers = await Promise.all(
-        data.map(async (match) => {
-          const matchedUserId = match.user1_id === user.id ? match.user2_id : match.user1_id;
-          const { data: userData, error: userError } = await supabase
-            .from('profiles')
-            .select('id, name, avatar_url')
-            .eq('id', matchedUserId)
-            .single();
-
-          if (userError) throw userError;
-
-          return {
-            id: match.id,
-            user: userData,
-            project: match.projects,
-            chat_room: match.chat_rooms,
-          };
-        })
-      );
-
-      setMatches(matchedUsers);
+      if (matchesData) {
+        const formattedMatches: Match[] = matchesData.map((match: any) => ({
+          id: match.id,
+          user: match.user[0],
+          project: match.project[0],
+          chat_room: match.chat_room[0],
+        }));
+        setMatches(formattedMatches);
+      }
     } catch (error) {
       console.error('Error fetching matches:', error);
     } finally {

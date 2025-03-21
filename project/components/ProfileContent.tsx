@@ -1,5 +1,7 @@
+import React from 'react';
 import { useState } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Platform, Linking } from 'react-native';
+import { useRouter } from 'expo-router';
 import { 
   Code as Code2, 
   Briefcase, 
@@ -15,8 +17,14 @@ import {
   Users,
   Calendar,
   Languages,
-  BookOpen
+  BookOpen,
+  Building2
 } from 'lucide-react-native';
+
+type Skill = {
+  name: string;
+  years: string;
+};
 
 type ProfileData = {
   name: string;
@@ -25,46 +33,25 @@ type ProfileData = {
   email: string;
   website: string;
   image: string;
-  coverUrl?: string;
-  bio?: string;
-  academic?: {
-    university: string;
-    faculty: string;
-    department: string;
-    grade: string;
-    researchLab?: string;
-    advisor?: string;
-    gpa?: string;
-  };
-  skills: Array<{ name: string; level: string }>;
+  coverUrl: string;
+  bio: string;
+  githubUsername: string;
+  twitterUsername: string;
   interests: string[];
-  languages?: Array<{ name: string; level: string }>;
-  achievements?: {
-    githubContributions?: number;
-    projectsCompleted?: number;
-    hackathonsWon?: number;
-    papers?: number;
-  };
-  activities?: Array<{
-    id: string;
-    title: string;
-    organization: string;
-    period: string;
-    description: string;
-  }>;
-  coursework?: string[];
-  certifications?: string[];
-  githubUsername?: string;
-  twitterUsername?: string;
+  skills: Skill[];
+  age: string;
+  university: string;
+  activities: string[];
+  certifications: string[];
 };
 
-interface ProfileContentProps {
-  profileData: ProfileData;
+type ProfileContentProps = {
+  profile: ProfileData;
   isOwnProfile: boolean;
-  onEdit?: () => void;
-}
+  onEditPress?: () => void;
+};
 
-export default function ProfileContent({ profileData, isOwnProfile, onEdit }: ProfileContentProps) {
+export default function ProfileContent({ profile, isOwnProfile, onEditPress }: ProfileContentProps) {
   const renderSectionHeader = (title: string) => (
     <Text style={styles.sectionTitle}>{title}</Text>
   );
@@ -73,18 +60,18 @@ export default function ProfileContent({ profileData, isOwnProfile, onEdit }: Pr
     let url = '';
     switch (type) {
       case 'github':
-        if (profileData.githubUsername) {
-          url = `https://github.com/${profileData.githubUsername}`;
+        if (profile.githubUsername) {
+          url = `https://github.com/${profile.githubUsername}`;
         }
         break;
       case 'twitter':
-        if (profileData.twitterUsername) {
-          url = `https://twitter.com/${profileData.twitterUsername}`;
+        if (profile.twitterUsername) {
+          url = `https://twitter.com/${profile.twitterUsername}`;
         }
         break;
       case 'website':
-        if (profileData.website) {
-          url = profileData.website.startsWith('http') ? profileData.website : `https://${profileData.website}`;
+        if (profile.website) {
+          url = profile.website.startsWith('http') ? profile.website : `https://${profile.website}`;
         }
         break;
     }
@@ -96,22 +83,22 @@ export default function ProfileContent({ profileData, isOwnProfile, onEdit }: Pr
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        {profileData.coverUrl && (
+        {profile.coverUrl && (
           <Image 
-            source={{ uri: profileData.coverUrl }} 
+            source={{ uri: profile.coverUrl }} 
             style={styles.coverImage}
             resizeMode="cover"
           />
         )}
         <Image 
-          source={{ uri: profileData.image }} 
+          source={{ uri: profile.image }} 
           style={styles.profileImage}
           resizeMode="cover"
         />
         
-        {isOwnProfile && onEdit && (
+        {isOwnProfile && onEditPress && (
           <View style={[styles.editButtonContainer, Platform.OS === 'ios' ? { top: 80 } : { top: 40 }]}>
-            <TouchableOpacity style={styles.editButton} onPress={onEdit}>
+            <TouchableOpacity style={styles.editButton} onPress={onEditPress}>
               <Edit3 size={20} color="#fff" />
               <Text style={styles.editButtonText}>編集</Text>
             </TouchableOpacity>
@@ -119,40 +106,40 @@ export default function ProfileContent({ profileData, isOwnProfile, onEdit }: Pr
         )}
 
         <View style={styles.headerContent}>
-          <Text style={styles.name}>{profileData.name}</Text>
-          <Text style={styles.title}>{profileData.title}</Text>
+          <Text style={styles.name}>{profile.name}</Text>
+          <Text style={styles.title}>{profile.title}</Text>
           
           <View style={styles.basicInfo}>
-            {profileData.location ? (
+            {profile.location ? (
               <View style={styles.infoRow}>
                 <MapPin size={16} color="#6b7280" />
-                <Text style={styles.infoText}>{profileData.location}</Text>
+                <Text style={styles.infoText}>{profile.location}</Text>
               </View>
             ) : null}
-            {profileData.email ? (
+            {profile.email ? (
               <View style={styles.infoRow}>
                 <Mail size={16} color="#6b7280" />
-                <Text style={styles.infoText}>{profileData.email}</Text>
+                <Text style={styles.infoText}>{profile.email}</Text>
               </View>
             ) : null}
-            {profileData.website ? (
+            {profile.website ? (
               <TouchableOpacity style={styles.infoRow} onPress={() => handleSocialLink('website')}>
                 <Globe size={16} color="#6b7280" />
-                <Text style={[styles.infoText, styles.link]}>{profileData.website}</Text>
+                <Text style={[styles.infoText, styles.link]}>{profile.website}</Text>
               </TouchableOpacity>
             ) : null}
           </View>
         </View>
 
         <View style={styles.socialLinks}>
-          {profileData.githubUsername ? (
+          {profile.githubUsername ? (
             <TouchableOpacity 
               style={styles.socialButton}
               onPress={() => handleSocialLink('github')}>
               <Github size={20} color="#1f2937" />
             </TouchableOpacity>
           ) : null}
-          {profileData.twitterUsername ? (
+          {profile.twitterUsername ? (
             <TouchableOpacity 
               style={styles.socialButton}
               onPress={() => handleSocialLink('twitter')}>
@@ -166,40 +153,33 @@ export default function ProfileContent({ profileData, isOwnProfile, onEdit }: Pr
       <View style={styles.section}>
         {renderSectionHeader('自己紹介')}
         <Text style={styles.text}>
-          {profileData.bio && profileData.bio.trim() !== '' ? profileData.bio : '自己紹介がありません。'}
+          {profile.bio && profile.bio.trim() !== '' ? profile.bio : '自己紹介がありません。'}
         </Text>
       </View>
 
       {/* 学歴 */}
       <View style={styles.section}>
         {renderSectionHeader('学歴')}
-        {profileData.academic ? (
+        {profile.university ? (
           <View style={styles.academicInfo}>
             <View style={styles.academicRow}>
               <GraduationCap size={16} color="#6366f1" />
               <Text style={styles.academicText}>
-                {profileData.academic.university} {profileData.academic.faculty} {profileData.academic.department}
+                {profile.university}
               </Text>
             </View>
-            {profileData.academic.grade ? (
+            {profile.age ? (
               <View style={styles.academicRow}>
                 <Calendar size={16} color="#6366f1" />
-                <Text style={styles.academicText}>{profileData.academic.grade}</Text>
+                <Text style={styles.academicText}>{profile.age}</Text>
               </View>
             ) : null}
-            {profileData.academic.researchLab ? (
+            {profile.university ? (
               <View style={styles.academicRow}>
-                <BookOpen size={16} color="#6366f1" />
+                <Building2 size={16} color="#6366f1" />
                 <Text style={styles.academicText}>
-                  {profileData.academic.researchLab}
-                  {profileData.academic.advisor ? ` (${profileData.academic.advisor})` : ''}
+                  {profile.university}
                 </Text>
-              </View>
-            ) : null}
-            {profileData.academic.gpa ? (
-              <View style={styles.academicRow}>
-                <Star size={16} color="#6366f1" />
-                <Text style={styles.academicText}>GPA: {profileData.academic.gpa}</Text>
               </View>
             ) : null}
           </View>
@@ -211,59 +191,44 @@ export default function ProfileContent({ profileData, isOwnProfile, onEdit }: Pr
       {/* スキル */}
       <View style={styles.section}>
         {renderSectionHeader('スキル')}
-        {profileData.skills && profileData.skills.length > 0 ? (
+        {profile.skills && profile.skills.length > 0 ? (
           <View style={styles.skillsGrid}>
-            {profileData.skills.map((skill, index) => {
-              let skillData;
-              try {
-                skillData = typeof skill === 'string' ? JSON.parse(skill) : skill;
-              } catch (e) {
-                skillData = { name: skill, years: '未設定' };
-              }
-              return (
-                <View key={index} style={styles.skillItem}>
-                  <View style={styles.skillHeader}>
-                    <Code2 size={16} color="#6366f1" />
-                    <Text style={styles.skillName}>{skillData.name}</Text>
-                  </View>
-                  <Text style={styles.skillYears}>
-                    経験年数: {skillData.years}
-                  </Text>
+            {profile.skills.map((skill: Skill, index: number) => (
+              <View key={index} style={styles.skillItem}>
+                <View style={styles.skillHeader}>
+                  <Code2 size={16} color="#6366f1" />
+                  <Text style={styles.skillName}>{skill.name}</Text>
                 </View>
-              );
-            })}
+                <Text style={styles.skillYears}>
+                  経験年数: {skill.years}
+                </Text>
+              </View>
+            ))}
           </View>
         ) : (
           <Text style={styles.text}>スキルが登録されていません。</Text>
         )}
       </View>
 
-      {profileData.activities && profileData.activities.length > 0 && (
+      {profile.activities && profile.activities.length > 0 && (
         <View style={styles.section}>
           {renderSectionHeader('活動')}
           <View style={styles.activitiesContainer}>
-            {profileData.activities.map((activity) => (
-              <View key={activity.id} style={styles.activityItem}>
-                <View style={styles.activityHeader}>
-                  <Users size={16} color="#6366f1" />
-                  <Text style={styles.activityTitle}>{activity.title}</Text>
-                </View>
-                <Text style={styles.activityOrg}>{activity.organization}</Text>
-                <Text style={styles.activityPeriod}>{activity.period}</Text>
-                <Text style={styles.activityDescription}>{activity.description}</Text>
+            {profile.activities.map((activity: string, index: number) => (
+              <View key={index} style={styles.activityItem}>
+                <Text style={styles.activityText}>{activity}</Text>
               </View>
             ))}
           </View>
         </View>
       )}
 
-      {profileData.certifications && profileData.certifications.length > 0 && (
+      {profile.certifications && profile.certifications.length > 0 && (
         <View style={styles.section}>
           {renderSectionHeader('資格・認定')}
           <View style={styles.certificationsContainer}>
-            {profileData.certifications.map((cert, index) => (
+            {profile.certifications.map((cert: string, index: number) => (
               <View key={index} style={styles.certificationItem}>
-                <Award size={16} color="#6366f1" />
                 <Text style={styles.certificationText}>{cert}</Text>
               </View>
             ))}
@@ -271,11 +236,11 @@ export default function ProfileContent({ profileData, isOwnProfile, onEdit }: Pr
         </View>
       )}
 
-      {profileData.interests && profileData.interests.length > 0 && (
+      {profile.interests && profile.interests.length > 0 && (
         <View style={styles.section}>
           {renderSectionHeader('興味のある分野')}
           <View style={styles.interestsContainer}>
-            {profileData.interests.map((interest, index) => (
+            {profile.interests.map((interest: string, index: number) => (
               <View key={index} style={styles.interestItem}>
                 <Briefcase size={16} color="#6b7280" />
                 <Text style={styles.interestText}>{interest}</Text>
@@ -449,28 +414,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
   },
-  activityHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  activityTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#1f2937',
-  },
-  activityOrg: {
-    fontSize: 14,
-    color: '#6366f1',
-    marginBottom: 4,
-  },
-  activityPeriod: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginBottom: 8,
-  },
-  activityDescription: {
+  activityText: {
     fontSize: 14,
     color: '#4b5563',
     lineHeight: 20,
