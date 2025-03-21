@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Image, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Mail, Lock, ArrowRight } from 'lucide-react-native';
 import axios from 'axios';
@@ -25,6 +25,26 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [focusedInput, setFocusedInput] = useState<'email' | 'password' | null>(null);
+
+  const spinValue = new Animated.Value(0);
+  const spin = spinValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg']
+  });
+
+  const handleBlur = () => {
+    setFocusedInput(null);
+  };
+
+  const startSpinning = () => {
+    Animated.loop(
+      Animated.timing(spinValue, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      })
+    ).start();
+  };
 
   const saveToken = async (id_token: string) => {
     try {
@@ -63,7 +83,7 @@ export default function LoginScreen() {
       if (apiResponse.data && apiResponse.data.id_token) {
         return { id_token: apiResponse.data.id_token };
       } else {
-        return { error: new Error('トークンの取得に失敗しました') };
+        return { error: new Error('ログインに失敗しました。もう一度お試しください。') };
       }
     } catch (error) {
       console.error("ログイン失敗:", error);
@@ -74,33 +94,69 @@ export default function LoginScreen() {
         const errorData = error.response?.data;
         const errorMessage = errorData?.message || errorData?.error || '予期せぬエラーが発生しました';
         
+        // エラーメッセージの日本語化
+        let userFriendlyMessage = '予期せぬエラーが発生しました。';
+        
+        if (errorMessage.includes('NotAuthorizedException')) {
+          userFriendlyMessage = 'メールアドレスまたはパスワードが正しくありません。';
+        } else if (errorMessage.includes('UserNotFoundException')) {
+          userFriendlyMessage = 'このメールアドレスは登録されていません。';
+        } else if (errorMessage.includes('UserNotConfirmedException')) {
+          userFriendlyMessage = 'メールアドレスの確認が完了していません。';
+        } else if (errorMessage.includes('TooManyRequestsException')) {
+          userFriendlyMessage = 'ログイン試行回数が多すぎます。しばらく待ってから再度お試しください。';
+        }
+        
         switch (error.response?.status) {
           case 500:
-            return { error: new Error(`サーバーエラー: ${errorMessage}`) };
+            return { error: new Error(`サーバーエラーが発生しました。\n${userFriendlyMessage}`) };
           case 400:
-            return { error: new Error(`入力エラー: ${errorMessage}`) };
+            return { error: new Error(`入力内容に問題があります。\n${userFriendlyMessage}`) };
           case 401:
-            return { error: new Error('メールアドレスまたはパスワードが正しくありません。') };
+            return { error: new Error(userFriendlyMessage) };
           case 403:
-            return { error: new Error('アクセスが拒否されました。APIキーまたは認証トークンが正しくありません。') };
+            return { error: new Error('アクセスが拒否されました。\nシステム管理者に連絡してください。') };
           case 404:
-            return { error: new Error('APIエンドポイントが見つかりません。') };
+            return { error: new Error('サービスが見つかりません。\nシステム管理者に連絡してください。') };
           default:
-            return { error: new Error(`エラー: ${errorMessage}`) };
+            return { error: new Error(userFriendlyMessage) };
         }
       }
-      return { error: new Error('予期せぬエラーが発生しました。もう一度お試しください。') };
+      return { error: new Error('予期せぬエラーが発生しました。\nもう一度お試しください。') };
+    }
+  }
+
+  async function getUserName(id_token: string) {
+    try {
+      console.log("トークン:", id_token);
+      // API Gatewayにリクエストを送信
+      const apiResponse = await axios.post(
+        `${API_GATEWAY_URL}/get_username`,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY,
+            'Authorization': `Bearer ${id_token}`
+          }
+        }
+      );
+      return apiResponse.data.name;
+    } catch (error) {
+      console.error("ユーザー名の取得に失敗:", error);
+      return null;
     }
   }
 
   const handleLogin = async () => {
     if (!email || !password) {
-      setError('すべての項目を入力してください');
+      setError('メールアドレスとパスワードを入力してください');
       return;
     }
 
     try {
       setLoading(true);
+      startSpinning();
       setError(null);
 
       const { error: loginError, id_token: idToken } = await login(email, password);
@@ -112,7 +168,17 @@ export default function LoginScreen() {
       if (idToken) {
         // トークンを保存
         await saveToken(idToken);
-        router.replace(`/(tabs)`);
+        
+        // ユーザー名を取得
+        const userName = await getUserName(idToken);
+        
+        if (!userName) {
+          // ユーザー名が取得できない場合はプロフィール設定画面へ
+          router.replace('/(auth)/setup');
+        } else {
+          // ユーザー名が取得できた場合はメイン画面へ
+          router.replace('/(tabs)');
+        }
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -156,7 +222,7 @@ export default function LoginScreen() {
             value={email}
             onChangeText={setEmail}
             onFocus={() => setFocusedInput('email')}
-            onBlur={() => setFocusedInput(null)}
+            onBlur={handleBlur}
             autoCapitalize="none"
             keyboardType="email-address"
             editable={!loading}
@@ -174,7 +240,7 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             onFocus={() => setFocusedInput('password')}
-            onBlur={() => setFocusedInput(null)}
+            onBlur={handleBlur}
             secureTextEntry
             editable={!loading}
           />
@@ -184,14 +250,18 @@ export default function LoginScreen() {
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleLogin}
           disabled={loading}>
-          <Text style={styles.buttonText}>
-            {loading ? 'ログイン中...' : 'ログイン'}
-          </Text>
+          {loading ? (
+            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+              <Text style={styles.buttonText}>ログイン中...</Text>
+            </Animated.View>
+          ) : (
+            <Text style={styles.buttonText}>ログイン</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.registerButton}
-          onPress={() => router.push('/register')}>
+          onPress={() => router.push('/(auth)/register')}>
           <Text style={styles.registerButtonText}>
             アカウントをお持ちでない方
           </Text>
@@ -247,9 +317,11 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     backgroundColor: '#fee2e2',
-    padding: 12,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#fecaca',
   },
   errorText: {
     color: '#dc2626',
