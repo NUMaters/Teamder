@@ -619,27 +619,36 @@ export default function DiscoverScreen() {
             setSelectedProfile(null);
           }}
           profileData={{
-            name: selectedProfile.name,
-            title: selectedProfile.title,
-            location: selectedProfile.location,
-            email: selectedProfile.email,
-            website: selectedProfile.website,
-            image: selectedProfile.image_url,
+            name: selectedProfile.name || '',
+            title: selectedProfile.title || '',
+            location: selectedProfile.location || '',
+            email: selectedProfile.email || '',
+            website: selectedProfile.website || '',
+            image: selectedProfile.image_url || '',
             coverUrl: selectedProfile.cover_url || '',
-            bio: selectedProfile.bio,
-            githubUsername: selectedProfile.github_username,
-            twitterUsername: selectedProfile.twitter_username,
+            bio: selectedProfile.bio || '',
+            githubUsername: selectedProfile.github_username || '',
+            twitterUsername: selectedProfile.twitter_username || '',
             interests: selectedProfile.interests || [],
-            skills: selectedProfile.skills.map(skill => {
-              try {
-                const skillData = typeof skill === 'string' ? JSON.parse(skill) : skill;
-                return { name: skillData.name, years: skillData.years };
-              } catch (e) {
-                return { name: skill, years: '未設定' };
+            skills: (selectedProfile.skills || []).map(skill => {
+              if (typeof skill === 'string') {
+                try {
+                  const parsedSkill = JSON.parse(skill);
+                  return {
+                    name: (parsedSkill as any).name || '',
+                    years: (parsedSkill as any).years || '未設定'
+                  };
+                } catch (e) {
+                  return { name: skill, years: '未設定' };
+                }
               }
+              return {
+                name: (skill as any).name || '',
+                years: (skill as any).years || '未設定'
+              };
             }),
-            age: String(selectedProfile.age),
-            university: selectedProfile.university,
+            age: String(selectedProfile.age || ''),
+            university: selectedProfile.university || '',
             activities: [],
             certifications: []
           }}

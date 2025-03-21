@@ -110,10 +110,22 @@ export default function ProfileContent({ profile, isOwnProfile, onEditPress }: P
           <Text style={styles.title}>{profile.title}</Text>
           
           <View style={styles.basicInfo}>
+            {profile.age ? (
+              <View style={styles.infoRow}>
+                <Calendar size={16} color="#6b7280" />
+                <Text style={styles.infoText}>{profile.age}歳</Text>
+              </View>
+            ) : null}
             {profile.location ? (
               <View style={styles.infoRow}>
                 <MapPin size={16} color="#6b7280" />
                 <Text style={styles.infoText}>{profile.location}</Text>
+              </View>
+            ) : null}
+            {profile.university ? (
+              <View style={styles.infoRow}>
+                <GraduationCap size={16} color="#6b7280" />
+                <Text style={styles.infoText}>{profile.university}</Text>
               </View>
             ) : null}
             {profile.email ? (
@@ -155,37 +167,6 @@ export default function ProfileContent({ profile, isOwnProfile, onEditPress }: P
         <Text style={styles.text}>
           {profile.bio && profile.bio.trim() !== '' ? profile.bio : '自己紹介がありません。'}
         </Text>
-      </View>
-
-      {/* 学歴 */}
-      <View style={styles.section}>
-        {renderSectionHeader('学歴')}
-        {profile.university ? (
-          <View style={styles.academicInfo}>
-            <View style={styles.academicRow}>
-              <GraduationCap size={16} color="#6366f1" />
-              <Text style={styles.academicText}>
-                {profile.university}
-              </Text>
-            </View>
-            {profile.age ? (
-              <View style={styles.academicRow}>
-                <Calendar size={16} color="#6366f1" />
-                <Text style={styles.academicText}>{profile.age}</Text>
-              </View>
-            ) : null}
-            {profile.university ? (
-              <View style={styles.academicRow}>
-                <Building2 size={16} color="#6366f1" />
-                <Text style={styles.academicText}>
-                  {profile.university}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        ) : (
-          <Text style={styles.text}>学歴情報がありません。</Text>
-        )}
       </View>
 
       {/* スキル */}
@@ -367,18 +348,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4b5563',
     lineHeight: 20,
-  },
-  academicInfo: {
-    gap: 12,
-  },
-  academicRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  academicText: {
-    fontSize: 14,
-    color: '#1f2937',
   },
   skillsGrid: {
     flexDirection: 'row',
