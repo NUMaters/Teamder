@@ -273,7 +273,7 @@ export default function SetupScreen() {
       if (apiResponse.data.success) {
         router.replace('/(tabs)');
       } else {
-        throw new Error(apiResponse.data.message || 'プロフィールの設定に失敗しました');
+        throw new Error('プロフィールの設定に失敗しました');
       }
     } catch (error) {
       console.error('Setup error:', error);
