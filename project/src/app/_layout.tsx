@@ -1,9 +1,6 @@
-import React, { useEffect } from 'react';
-import { Stack, Slot, useRouter, useSegments } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useFrameworkReady } from '@/hooks/useFrameworkReady';
-import { View } from 'react-native';
-import { useAuth } from '@/hooks/useAuth';
+import React from 'react';
+import { Stack } from 'expo-router';
+import 'react-native-gesture-handler';
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -18,7 +15,6 @@ export default function RootLayout() {
     const inTabsGroup = segments[0] === '(tabs)';
     const isTopPage = segments.length === 0;
 
-    
     if (!session && !inAuthGroup && !isTopPage) {
       // 認証されていない場合、ログインページにリダイレクト
       router.replace('/login');
@@ -26,7 +22,6 @@ export default function RootLayout() {
       // 認証されている場合、タブページにリダイレクト
       router.replace('/(tabs)');
     }
-      
   }, [session, initialized, segments]);
 
   // Show a loading state while initializing
@@ -41,13 +36,6 @@ export default function RootLayout() {
 
   // Render the stack navigator only after initialization
   return (
-    <>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-    </>
+    <Stack screenOptions={{ headerShown: false }} />
   );
 }

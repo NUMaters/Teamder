@@ -5,6 +5,9 @@ import { Camera, Upload, X, ChevronDown, Code2 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import * as FileSystem from 'expo-file-system';
+import { Amplify } from 'aws-amplify';
+import { getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
+import '../../../lib/aws-config';
 
 // 環境変数の型定義
 const API_GATEWAY_URL = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
@@ -218,52 +221,43 @@ export default function SetupScreen() {
       setLoading(true);
       setError(null);
 
-      // 画像のアップロード処理
-      let iconUrl = null;
-      let coverUrl = null;
+      // 現在のユーザーのセッショントークンを取得
+      const session = await fetchAuthSession();
+      const jwtToken = session.tokens?.idToken?.toString();
 
-      if (images.icon) {
-        const iconFormData = new FormData();
-        iconFormData.append('file', {
-          uri: images.icon.uri,
-          type: 'image/jpeg',
-          name: 'icon.jpg',
-        } as any);
-        // アイコン画像のアップロード処理
-      }
+      console.log('JWT Token:', jwtToken); // デバッグ用
 
-      if (images.cover) {
-        const coverFormData = new FormData();
-        coverFormData.append('file', {
-          uri: images.cover.uri,
-          type: 'image/jpeg',
-          name: 'cover.jpg',
-        } as any);
-        // カバー画像のアップロード処理
+      if (!jwtToken) {
+        throw new Error('認証トークンが取得できませんでした');
       }
 
       // API Gatewayにリクエストを送信
       const apiResponse = await axios.post(
-        `${API_GATEWAY_URL}/set_profile`,
+        `${API_GATEWAY_URL}/profile/setup`,
         {
-          ...formData,
-          icon_url: iconUrl,
-          cover_url: coverUrl,
+          username: formData.username,
+          school: formData.school,
+          age: formData.age,
+          location: formData.location,
+          bio: formData.bio || '',
+          skills: formData.skills,
+          interests: formData.interests,
+          icon_url: images.icon === defaultImages.icon ? null : images.icon.uri,
+          cover_url: images.cover === defaultImages.cover ? null : images.cover.uri,
         },
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'x-api-key': API_KEY,
+            'Authorization': `Bearer ${jwtToken}`
           }
         }
       );
 
-      if (apiResponse.data.success) {
-        //router.replace('/(tabs)/index');
-        router.push({
-          pathname: '/(tabs)',
-          params: { token: token }
-        });
+      console.log('API Response:', apiResponse.data); // デバッグ用
+
+      if (apiResponse.status === 200) {
+        router.replace('/(tabs)');
       } else {
         throw new Error('プロフィールの設定に失敗しました');
       }
@@ -271,6 +265,7 @@ export default function SetupScreen() {
       console.error('Setup error:', error);
       if (axios.isAxiosError(error)) {
         const errorMessage = error.response?.data?.message || 'プロフィールの設定に失敗しました';
+        console.error('Error response:', error.response?.data); // デバッグ用
         setError(errorMessage);
       } else {
         setError('予期せぬエラーが発生しました。もう一度お試しください。');
