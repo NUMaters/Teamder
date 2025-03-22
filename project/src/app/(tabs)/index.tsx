@@ -9,10 +9,11 @@ import ProfileModal from '@/components/ProfileModal';
 import ProjectModal from '@/components/ProjectModal';
 import CreateProjectModal from '@/components/CreateProjectModal';
 import type { ProjectFormData } from '@/components/CreateProjectModal';
-import { supabase } from '@/lib/supabase';
+//import { supabase } from '@/lib/supabase';
 import axios from 'axios';
 
 const API_GATEWAY_URL = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
+const API_GATEWAY_URL_PRJ = process.env.EXPO_PUBLIC_API_GATEWAY_URL_PROJECT
 
 type Category = 'engineers' | 'projects';
 type LikeType = 'like' | 'superlike';
@@ -174,6 +175,7 @@ export default function DiscoverScreen() {
   const fetchProjects = async () => {
     try {
       setIsLoading(true);
+      /*
       const { data, error } = await supabase
         .from('projects')
         .select('*')
@@ -182,9 +184,24 @@ export default function DiscoverScreen() {
       if (error) {
         throw error;
       }
+      */
 
-      if (data) {
-        const formattedProjects: Project[] = data.map(project => ({
+      const apiResponse = await axios.post(
+        `${API_GATEWAY_URL_PRJ}/get_project`,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      if(apiResponse.data.error){
+        return
+      }
+
+      if (apiResponse.data) {
+        const formattedProjects: Project[] = [apiResponse.data].map(project => ({
           ...project,
           likes: project.likes || []
         }));
