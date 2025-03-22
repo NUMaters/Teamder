@@ -18,6 +18,7 @@ export default function RootLayout() {
     const inTabsGroup = segments[0] === '(tabs)';
     const isTopPage = segments.length === 0;
 
+    
     if (!session && !inAuthGroup && !isTopPage) {
       // 認証されていない場合、ログインページにリダイレクト
       router.replace('/login');
@@ -25,6 +26,7 @@ export default function RootLayout() {
       // 認証されている場合、タブページにリダイレクト
       router.replace('/(tabs)');
     }
+      
   }, [session, initialized, segments]);
 
   // Show a loading state while initializing
