@@ -236,7 +236,7 @@ export default function CreateProjectScreen() {
                   style={styles.infoInput}
                   value={formData.location}
                   onChangeText={(text) => setFormData({ ...formData, location: text })}
-                  placeholder="勤務地"
+                  placeholder="場所 "
                   placeholderTextColor="#9ca3af"
                 />
               </View>

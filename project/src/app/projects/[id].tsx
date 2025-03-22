@@ -366,7 +366,7 @@ export default function ProjectDetailsScreen() {
                 style={styles.infoInput}
                 value={project.location}
                 onChangeText={(text) => setProject({ ...project, location: text })}
-                placeholder="勤務地"
+                placeholder="場所"
               />
             ) : (
               <Text style={styles.infoText}>{project.location}</Text>

@@ -69,6 +69,7 @@ type Project = {
   status: string;
   created_at: string;
   updated_at: string;
+  skills: string[];
   likes: Like[];
 };
 
@@ -157,7 +158,22 @@ export default function DiscoverScreen() {
       setIsLoading(true);
       const { data, error } = await supabase
         .from('projects')
-        .select('*')
+        .select(`
+          id,
+          owner_id,
+          title,
+          university,
+          image_url,
+          location,
+          description,
+          team_size,
+          duration,
+          budget,
+          status,
+          created_at,
+          updated_at,
+          skills
+        `)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -166,8 +182,21 @@ export default function DiscoverScreen() {
 
       if (data) {
         const formattedProjects: Project[] = data.map(project => ({
-          ...project,
-          likes: project.likes || []
+          id: project.id,
+          owner_id: project.owner_id,
+          title: project.title || '',
+          university: project.university || '',
+          image_url: project.image_url || '',
+          location: project.location || '',
+          description: project.description || '',
+          team_size: project.team_size || '',
+          duration: project.duration || '',
+          budget: project.budget || '',
+          status: project.status || '募集中',
+          created_at: project.created_at,
+          updated_at: project.updated_at,
+          skills: project.skills || [],
+          likes: []
         }));
         setProjects(formattedProjects);
       }
@@ -395,7 +424,9 @@ export default function DiscoverScreen() {
       <View style={styles.card}>
         <View style={styles.imageContainer}>
           <Image 
-            source={{ uri: project.image_url || 'https://via.placeholder.com/400x300' }} 
+            source={{ 
+              uri: project.image_url || 'https://placehold.co/600x400/e0e7ff/6366f1.png?text=No+Image' 
+            }} 
             style={styles.cardImage} 
           />
           <View style={styles.imageOverlay}>
@@ -420,27 +451,45 @@ export default function DiscoverScreen() {
             </View>
 
             <View style={styles.infoContainer}>
-              <View style={styles.infoRow}>
-                <MapPin size={16} color="#6b7280" />
-                <Text style={styles.infoText}>{project.location}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Users size={16} color="#6b7280" />
-                <Text style={styles.infoText}>{project.team_size}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Clock size={16} color="#6b7280" />
-                <Text style={styles.infoText}>{project.duration}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <CreditCard size={16} color="#6b7280" />
-                <Text style={styles.infoText}>{project.budget}</Text>
-              </View>
+              {project.location && (
+                <View style={styles.infoRow}>
+                  <MapPin size={16} color="#6b7280" />
+                  <Text style={styles.infoText}>{project.location}</Text>
+                </View>
+              )}
+              {project.team_size && (
+                <View style={styles.infoRow}>
+                  <Users size={16} color="#6b7280" />
+                  <Text style={styles.infoText}>{project.team_size}</Text>
+                </View>
+              )}
+              {project.duration && (
+                <View style={styles.infoRow}>
+                  <Clock size={16} color="#6b7280" />
+                  <Text style={styles.infoText}>{project.duration}</Text>
+                </View>
+              )}
+              {project.budget && (
+                <View style={styles.infoRow}>
+                  <CreditCard size={16} color="#6b7280" />
+                  <Text style={styles.infoText}>{project.budget}</Text>
+                </View>
+              )}
             </View>
 
             <Text style={styles.bio} numberOfLines={3}>
               {project.description}
             </Text>
+
+            {project.skills && project.skills.length > 0 && (
+              <View style={styles.skillsContainer}>
+                {project.skills.map((skill, index) => (
+                  <View key={index} style={styles.skillBadge}>
+                    <Text style={styles.skillText}>{skill}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         </ScrollView>
       </View>
