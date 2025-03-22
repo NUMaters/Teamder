@@ -53,7 +53,8 @@ export default function ProfileScreen() {
         .select('*')
         .eq('id', user.id)
         .single();
-
+      
+      /*
       if (error) {
         console.error('プロフィール取得エラー:', error);
         // エラーが発生した場合、ログアウトを実行
@@ -61,6 +62,7 @@ export default function ProfileScreen() {
         router.replace('/(auth)/login');
         return;
       }
+      */
 
       if (!data) {
         throw new Error('プロフィールが見つかりません');
@@ -70,8 +72,10 @@ export default function ProfileScreen() {
     } catch (error) {
       console.error('プロフィール取得エラー:', error);
       // エラーが発生した場合、ログアウトを実行
+      /*
       await supabase.auth.signOut();
       router.replace('/(auth)/login');
+      */
     } finally {
       setLoading(false);
     }
