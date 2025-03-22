@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platfo
 import { useRouter } from 'expo-router';
 import { Camera, MapPin, Mail, Globe, Plus, X, ChevronDown } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '@/lib/supabase';
 
 // 47都道府県
 const PREFECTURES = [

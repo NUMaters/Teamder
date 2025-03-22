@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { Modal, View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, TextInput, Image, Alert, Linking, KeyboardAvoidingView } from 'react-native';
 import { X, Plus, ChevronDown, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '../lib/supabase';
+import { createApiRequest, DEFAULT_ICON_URL, DEFAULT_COVER_URL } from '@/lib/api-client';
+
+type ImageType = {
+  uri: string;
+};
 
 type Activity = {
   id: string;
@@ -71,6 +75,10 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
   const [showInterestsPicker, setShowInterestsPicker] = useState(false);
   const [showExperiencePicker, setShowExperiencePicker] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
+  const [images, setImages] = useState<Record<'icon' | 'cover', ImageType>>({
+    icon: { uri: initialData.imageUrl || DEFAULT_ICON_URL },
+    cover: { uri: initialData.coverUrl || DEFAULT_COVER_URL },
+  });
 
   const handleImagePick = async (type: 'profile' | 'cover') => {
     try {
@@ -95,7 +103,6 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
         return;
       }
 
-      // Launch image picker with correct configuration
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -104,10 +111,32 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const imageUri = result.assets[0].uri;
-        setFormData(prev => ({
+        const file = result.assets[0];
+        const fileExt = file.uri.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+
+        // Create form data for image upload
+        const formData = new FormData();
+        formData.append('file', {
+          uri: file.uri,
+          type: `image/${fileExt}`,
+          name: fileName,
+        } as any);
+
+        // Upload image
+        const uploadResponse = await createApiRequest(
+          type === 'profile' ? '/upload/profile-image' : '/upload/cover-image',
+          'POST',
+          formData
+        );
+
+        if (!uploadResponse.data?.url) {
+          throw new Error('画像のアップロードに失敗しました');
+        }
+
+        setImages(prev => ({
           ...prev,
-          [type === 'profile' ? 'imageUrl' : 'coverUrl']: imageUri
+          [type === 'profile' ? 'icon' : 'cover']: { uri: uploadResponse.data.url }
         }));
       }
     } catch (error) {
@@ -182,29 +211,25 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
 
   const handleSubmit = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('ユーザーが見つかりません');
+      const response = await createApiRequest('/user/profile', 'PUT', {
+        name: formData.name,
+        title: formData.title,
+        university: formData.university,
+        location: formData.location,
+        github_username: formData.githubUsername,
+        twitter_username: formData.twitterUsername,
+        bio: formData.bio,
+        image_url: images.icon.uri,
+        cover_url: images.cover.uri,
+        skills: formData.skills,
+        interests: formData.interests,
+        age: formData.age,
+        activities: formData.activities,
+      });
 
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          name: formData.name,
-          title: formData.title,
-          university: formData.university,
-          location: formData.location,
-          github_username: formData.githubUsername,
-          twitter_username: formData.twitterUsername,
-          bio: formData.bio,
-          image_url: formData.imageUrl,
-          cover_url: formData.coverUrl,
-          skills: formData.skills,
-          interests: formData.interests,
-          age: formData.age,
-          activities: formData.activities,
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      if (!response.data) {
+        throw new Error('プロフィールの更新に失敗しました');
+      }
 
       onClose();
       onUpdate();
@@ -235,8 +260,8 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
             style={styles.form}
             keyboardShouldPersistTaps="handled">
             <View style={styles.coverImageContainer}>
-              {formData.coverUrl ? (
-                <Image source={{ uri: formData.coverUrl }} style={styles.coverImage} />
+              {images.cover.uri ? (
+                <Image source={{ uri: images.cover.uri }} style={styles.coverImage} />
               ) : (
                 <View style={styles.coverImagePlaceholder} />
               )}
@@ -249,8 +274,8 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
             </View>
 
             <View style={styles.profileImageContainer}>
-              {formData.imageUrl ? (
-                <Image source={{ uri: formData.imageUrl }} style={styles.profileImage} />
+              {images.icon.uri ? (
+                <Image source={{ uri: images.icon.uri }} style={styles.profileImage} />
               ) : (
                 <View style={styles.profileImagePlaceholder} />
               )}

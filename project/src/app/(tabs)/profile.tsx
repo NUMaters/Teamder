@@ -1,128 +1,54 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { LogOut } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { createApiRequest, removeToken } from '@/lib/api-client';
+import { Profile } from '@/types/profile';
 import ProfileContent from '@/components/ProfileContent';
 import EditProfileModal from '@/components/EditProfileModal';
 
-type Profile = {
-  id: string;
-  name: string | null;
-  title: string | null;
-  location: string | null;
-  email: string | null;
-  website: string | null;
-  image_url: string | null;
-  cover_url: string | null;
-  bio: string | null;
-  university: string | null;
-  github_username: string | null;
-  twitter_username: string | null;
-  interests: string[] | null;
-  skills: { name: string; years: string }[] | null;
-  created_at: string;
-  updated_at: string;
-  age: number | null;
-  activities: {
-    id: string;
-    title: string;
-    period: string;
-    description: string;
-    link?: string;
-  }[] | null;
-};
-
 export default function ProfileScreen() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
-
-  const fetchProfile = async () => {
-    try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        throw new Error('ユーザー情報が見つかりません');
-      }
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      
-      /*
-      if (error) {
-        console.error('プロフィール取得エラー:', error);
-        // エラーが発生した場合、ログアウトを実行
-        await supabase.auth.signOut();
-        router.replace('/(auth)/login');
-        return;
-      }
-      */
-
-      if (!data) {
-        throw new Error('プロフィールが見つかりません');
-      }
-
-      setProfile(data);
-    } catch (error) {
-      console.error('プロフィール取得エラー:', error);
-      // エラーが発生した場合、ログアウトを実行
-      /*
-      await supabase.auth.signOut();
-      router.replace('/(auth)/login');
-      */
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
     fetchProfile();
   }, []);
 
+  const fetchProfile = async () => {
+    try {
+      const response = await createApiRequest('/profile', 'GET');
+      if (response.data) {
+        setProfile(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      Alert.alert('エラー', 'プロフィールの取得に失敗しました。');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleProfileUpdate = () => {
     fetchProfile(); // プロフィールを再取得
   };
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'ログアウト',
-      'ログアウトしてもよろしいですか？',
-      [
-        {
-          text: 'キャンセル',
-          style: 'cancel',
-        },
-        {
-          text: 'ログアウト',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              const { error } = await supabase.auth.signOut();
-              if (error) throw error;
-              router.replace('/login');
-            } catch (error) {
-              console.error('Logout error:', error);
-              Alert.alert('エラー', 'ログアウトに失敗しました');
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ],
-    );
+  const handleSignOut = async () => {
+    try {
+      await removeToken();
+      router.replace('/(auth)/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      Alert.alert('エラー', 'ログアウトに失敗しました。');
+    }
   };
 
-  if (!profile) {
+  if (loading) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loadingText}>読み込み中...</Text>
+        <Text>読み込み中...</Text>
       </View>
     );
   }
@@ -133,7 +59,7 @@ export default function ProfileScreen() {
         <Text style={styles.headerTitle}>プロフィール</Text>
         <TouchableOpacity
           style={styles.logoutButton}
-          onPress={handleLogout}
+          onPress={handleSignOut}
           disabled={loading}>
           <LogOut size={20} color="#ef4444" />
           <Text style={styles.logoutButtonText}>
@@ -143,31 +69,42 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView style={styles.content}>
-        <ProfileContent
-          profile={{
-            name: profile.name || '',
-            title: profile.title || '',
-            location: profile.location || '',
-            email: profile.email || '',
-            website: profile.website || '',
-            image: profile.image_url || '',
-            coverUrl: profile.cover_url || '',
-            bio: profile.bio || '',
-            githubUsername: profile.github_username || '',
-            twitterUsername: profile.twitter_username || '',
-            interests: profile.interests || [],
-            skills: profile.skills?.map(skill => ({
-              name: skill.name,
-              years: skill.years
-            })) || [],
-            age: profile.age?.toString() || '',
-            university: profile.university || '',
-            activities: profile.activities || [],
-            certifications: []
-          }}
-          isOwnProfile={true}
-          onEditPress={() => setIsEditModalVisible(true)}
-        />
+        {profile ? (
+          <>
+            <ProfileContent
+              profile={{
+                name: profile.username || '',
+                title: profile.title || '',
+                location: profile.location || '',
+                email: profile.email || '',
+                website: profile.website || '',
+                image: profile.image || '',
+                coverUrl: profile.coverUrl || '',
+                bio: profile.bio || '',
+                githubUsername: profile.githubUsername || '',
+                twitterUsername: profile.twitterUsername || '',
+                interests: profile.interests || [],
+                skills: profile.skills?.map(skill => ({
+                  name: skill.name,
+                  years: skill.years
+                })) || [],
+                age: profile.age?.toString() || '',
+                university: profile.university || '',
+                activities: profile.activities || [],
+                certifications: []
+              }}
+              isOwnProfile={true}
+              onEditPress={() => setIsEditModalVisible(true)}
+            />
+            <Link href="/profile/edit" asChild>
+              <TouchableOpacity style={styles.button}>
+                <Text style={styles.buttonText}>プロフィール編集</Text>
+              </TouchableOpacity>
+            </Link>
+          </>
+        ) : (
+          <Text>プロフィールが見つかりません</Text>
+        )}
       </ScrollView>
 
       <EditProfileModal
@@ -175,19 +112,19 @@ export default function ProfileScreen() {
         onClose={() => setIsEditModalVisible(false)}
         onUpdate={handleProfileUpdate}
         initialData={{
-          name: profile.name || '',
-          title: profile.title || '',
-          university: profile.university || '',
-          location: profile.location || '',
-          githubUsername: profile.github_username || '',
-          twitterUsername: profile.twitter_username || '',
-          bio: profile.bio || '',
-          imageUrl: profile.image_url || '',
-          coverUrl: profile.cover_url || '',
-          skills: profile.skills || [],
-          interests: profile.interests || [],
-          age: profile.age?.toString() || '',
-          activities: profile.activities || []
+          name: profile?.username || '',
+          title: profile?.title || '',
+          university: profile?.university || '',
+          location: profile?.location || '',
+          githubUsername: profile?.githubUsername || '',
+          twitterUsername: profile?.twitterUsername || '',
+          bio: profile?.bio || '',
+          imageUrl: profile?.image || '',
+          coverUrl: profile?.coverUrl || '',
+          skills: profile?.skills || [],
+          interests: profile?.interests || [],
+          age: profile?.age?.toString() || '',
+          activities: profile?.activities || []
         }}
       />
     </View>
@@ -231,10 +168,20 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  loadingText: {
+  button: {
+    backgroundColor: '#007AFF',
+    padding: 15,
+    borderRadius: 10,
+    width: '100%',
+    marginVertical: 10,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: 'white',
     fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginTop: 20,
+    fontWeight: 'bold',
+  },
+  signOutButton: {
+    backgroundColor: '#FF3B30',
   },
 });

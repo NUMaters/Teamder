@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { ExternalLink, Clock, Users, MapPin, CreditCard, Heart } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import ProjectLikesModal from '@/components/ProjectLikesModal';
-import { supabase } from '@/lib/supabase';
+import { createApiRequest, DEFAULT_ICON_URL, DEFAULT_COVER_URL } from '@/lib/api-client';
 
 type ProjectStatus = 'active' | 'paused' | 'completed';
 
@@ -37,51 +37,24 @@ export default function ManageProjectsScreen() {
   const fetchMyProjects = async () => {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const userResponse = await createApiRequest('/user/current', 'GET');
       
-      if (!user) {
+      if (!userResponse.data?.id) {
         throw new Error('ユーザーが見つかりません');
       }
 
-      console.log('Current user:', user);
+      console.log('Current user:', userResponse.data);
 
-      // まず全てのプロジェクトを取得してデバッグ
-      const { data: allProjects, error: allProjectsError } = await supabase
-        .from('projects')
-        .select('*');
-
-      console.log('All projects in database:', allProjects); // 全プロジェクトの詳細をログ出力
-
-      // owner_idでフィルタリングする前のクエリをデバッグ
-      const { data: myProjects, error } = await supabase
-        .from('projects')
-        .select(`
-          id,
-          title,
-          university,
-          image_url,
-          location,
-          description,
-          team_size,
-          duration,
-          budget,
-          status,
-          created_at,
-          owner_id
-        `)
-        .eq('owner_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
+      const projectsResponse = await createApiRequest('/projects/my', 'GET');
+      if (!projectsResponse.data) {
+        throw new Error('プロジェクトの取得に失敗しました');
       }
 
-      console.log('Current user ID:', user.id);
-      console.log('Fetched projects:', myProjects);
-      console.log('Projects count:', myProjects ? myProjects.length : 0);
+      console.log('Current user ID:', userResponse.data.id);
+      console.log('Fetched projects:', projectsResponse.data);
+      console.log('Projects count:', projectsResponse.data.length);
 
-      setProjects(myProjects || []);
+      setProjects(projectsResponse.data);
     } catch (error) {
       console.error('Error fetching projects:', error);
       Alert.alert('エラー', 'プロジェクトの取得に失敗しました');
@@ -110,12 +83,11 @@ export default function ManageProjectsScreen() {
 
   const handleStatusChange = async (projectId: string, newStatus: ProjectStatus) => {
     try {
-      const { error } = await supabase
-        .from('projects')
-        .update({ status: newStatus })
-        .eq('id', projectId);
+      const response = await createApiRequest(`/projects/${projectId}/status`, 'PUT', {
+        status: newStatus
+      });
 
-      if (error) throw error;
+      if (!response.data) throw new Error('ステータスの更新に失敗しました');
 
       setProjects(prev => prev.map(project => 
         project.id === projectId ? { ...project, status: newStatus } : project
@@ -123,6 +95,7 @@ export default function ManageProjectsScreen() {
       setShowStatusMenu(null);
     } catch (error) {
       console.error('Error updating project status:', error);
+      Alert.alert('エラー', 'ステータスの更新に失敗しました');
     }
   };
 
@@ -200,7 +173,7 @@ export default function ManageProjectsScreen() {
               <View style={styles.projectHeader}>
                 <Image 
                   source={{ 
-                    uri: project.image_url || 'https://via.placeholder.com/80'
+                    uri: project.image_url || DEFAULT_COVER_URL
                   }} 
                   style={styles.projectImage} 
                 />

@@ -29,3 +29,30 @@ export type ProfileData = {
   activities: Activity[];
   certifications: string[];
 };
+
+export interface Profile {
+  id: string;
+  username: string;
+  title?: string;
+  location?: string;
+  email?: string;
+  website?: string;
+  image?: string;
+  coverUrl?: string;
+  bio?: string;
+  university?: string;
+  githubUsername?: string;
+  twitterUsername?: string;
+  interests?: string[];
+  skills?: { name: string; years: string }[];
+  created_at: string;
+  updated_at: string;
+  age?: number;
+  activities?: {
+    id: string;
+    title: string;
+    period: string;
+    description: string;
+    link?: string;
+  }[];
+}

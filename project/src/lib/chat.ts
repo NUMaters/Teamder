@@ -1,115 +1,103 @@
-import { supabase } from './supabase';
+import { createApiRequest } from './api-client';
 
-export type ChatMessage = {
+export interface ChatMessage {
   id: string;
-  roomId: string;
-  senderId: string;
   content: string;
-  createdAt: string;
-  readAt: string | null;
-};
+  sender_id: string;
+  receiver_id: string;
+  chat_room_id: string;
+  created_at: string;
+  read_at?: string | null;
+}
 
-export type ChatRoom = {
+export interface ChatRoom {
   id: string;
-  matchId: string;
-  lastMessage: string | null;
-  lastMessageAt: string | null;
-  updatedAt: string;
-  createdAt: string;
-};
+  user1_id: string;
+  user2_id: string;
+  created_at: string;
+  last_message?: string;
+  last_message_at?: string;
+  match: {
+    user2: {
+      name: string;
+      image_url: string;
+      title?: string;
+    };
+    project?: {
+      title: string;
+      image_url: string;
+      company?: string;
+    };
+  };
+}
 
 export const chatService = {
-  async getRooms() {
-    const { data, error } = await supabase
-      .from('chat_rooms')
-      .select(`
-        *,
-        match:matches (
-          user1:user1_id (id, name, image_url),
-          user2:user2_id (id, name, image_url),
-          project:project_id (
-            id,
-            title,
-            company,
-            image_url,
-            owner:owner_id (id, name, image_url)
-          )
-        )
-      `)
-      .order('last_message_at', { ascending: false });
-
-    if (error) throw error;
-    return data;
+  // メッセージの取得
+  getMessages: async (roomId: string): Promise<ChatMessage[]> => {
+    try {
+      const response = await createApiRequest(`/chat/${roomId}/messages`, 'GET');
+      return response.data.messages;
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      throw error;
+    }
   },
 
-  async getMessages(roomId: string) {
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('created_at', { ascending: true });
-
-    if (error) throw error;
-    return data;
+  // メッセージの送信
+  sendMessage: async (roomId: string, content: string): Promise<void> => {
+    try {
+      await createApiRequest(`/chat/${roomId}/messages`, 'POST', {
+        content: content.trim()
+      });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      throw error;
+    }
   },
 
-  async sendMessage(roomId: string, content: string) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .insert({
-        room_id: roomId,
-        sender_id: user.id,
-        content,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
+  // メッセージを既読にする
+  markAsRead: async (roomId: string): Promise<void> => {
+    try {
+      await createApiRequest(`/chat/${roomId}/read`, 'POST');
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+      throw error;
+    }
   },
 
-  async markAsRead(roomId: string) {
-    const { error } = await supabase
-      .rpc('mark_messages_as_read', { room_uuid: roomId });
-
-    if (error) throw error;
+  // チャットルーム一覧の取得
+  getChatRooms: async (): Promise<ChatRoom[]> => {
+    try {
+      const response = await createApiRequest('/chat/rooms', 'GET');
+      return response.data.rooms;
+    } catch (error) {
+      console.error('Error fetching chat rooms:', error);
+      throw error;
+    }
   },
 
-  subscribeToMessages(roomId: string, callback: (message: ChatMessage) => void) {
-    return supabase
-      .channel(`room:${roomId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `room_id=eq.${roomId}`,
-        },
-        (payload) => {
-          callback(payload.new as ChatMessage);
-        }
-      )
-      .subscribe();
+  // チャットルームの取得
+  getChatRoom: async (roomId: string): Promise<ChatRoom> => {
+    try {
+      const response = await createApiRequest(`/chat/${roomId}`, 'GET');
+      return response.data.room;
+    } catch (error) {
+      console.error('Error fetching chat room:', error);
+      throw error;
+    }
   },
 
-  subscribeToRooms(callback: (room: ChatRoom) => void) {
-    return supabase
-      .channel('rooms')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'chat_rooms',
-        },
-        (payload) => {
-          callback(payload.new as ChatRoom);
-        }
-      )
-      .subscribe();
-  },
+  // チャットルームの作成
+  createChatRoom: async (userId: string, projectId?: string): Promise<ChatRoom> => {
+    try {
+      const response = await createApiRequest('/chat/rooms', 'POST', {
+        user_id: userId,
+        project_id: projectId
+      });
+      return response.data.room;
+    } catch (error) {
+      console.error('Error creating chat room:', error);
+      throw error;
+    }
+  }
 };

@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { createApiRequest } from './api-client';
 
 export type Match = {
   id: string;
@@ -12,56 +12,24 @@ export type Match = {
 
 export const matchService = {
   async getMatches() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    const { data, error } = await supabase
-      .from('matches')
-      .select(`
-        *,
-        user1:user1_id (id, name, title, image_url),
-        user2:user2_id (id, name, title, image_url),
-        project:project_id (
-          id,
-          title,
-          company,
-          image_url,
-          owner:owner_id (id, name, image_url)
-        )
-      `)
-      .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return data;
+    const response = await createApiRequest('/matches', 'GET');
+    if (!response.data) throw new Error('マッチの取得に失敗しました');
+    return response.data;
   },
 
   async updateMatchStatus(matchId: string, status: Match['status']) {
-    const { data, error } = await supabase
-      .from('matches')
-      .update({ status })
-      .eq('id', matchId)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
+    const response = await createApiRequest(`/matches/${matchId}/status`, 'PUT', {
+      status
+    });
+    if (!response.data) throw new Error('マッチステータスの更新に失敗しました');
+    return response.data;
   },
 
   subscribeToMatches(callback: (match: Match) => void) {
-    return supabase
-      .channel('matches')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'matches',
-        },
-        (payload) => {
-          callback(payload.new as Match);
-        }
-      )
-      .subscribe();
+    // WebSocketの実装は別途必要
+    console.warn('WebSocket subscription is not implemented yet');
+    return {
+      unsubscribe: () => {}
+    };
   },
 };

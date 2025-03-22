@@ -1,7 +1,6 @@
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import ProfileContent from '@/components/ProfileContent';
 
 type Profile = {

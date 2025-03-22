@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,32 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Send, Image as ImageIcon, ArrowLeft } from 'lucide-react-native';
-import { chatService } from '@/lib/chat';
-import { supabase } from '@/lib/supabase';
-import type { ChatMessage } from '@/lib/chat';
+import { createApiRequest, DEFAULT_ICON_URL } from '@/lib/api-client';
+import { ChatMessage, chatService } from '@/lib/chat';
+
+interface LocalChatRoom {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  created_at: string;
+  match: {
+    user2: {
+      name: string;
+      image_url: string;
+      title?: string;
+    };
+    project?: {
+      title: string;
+      image_url: string;
+      company?: string;
+    };
+  };
+}
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams();
@@ -22,151 +42,155 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [roomData, setRoomData] = useState<any>(null);
+  const [sending, setSending] = useState(false);
+  const [room, setRoom] = useState<LocalChatRoom | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const intervalRef = useRef<NodeJS.Timeout>();
 
-  useEffect(() => {
-    // Get current user ID
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setUserId(user.id);
-      }
-    });
-
-    loadMessages();
-    const subscription = chatService.subscribeToMessages(id as string, (message) => {
-      setMessages(prev => [...prev, message]);
-      flatListRef.current?.scrollToEnd({ animated: true });
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [id]);
-
-  const loadMessages = async () => {
+  const fetchCurrentUser = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-
-      // Get room data
-      const { data: roomData, error: roomError } = await supabase
-        .from('chat_rooms')
-        .select(`
-          *,
-          match:matches (
-            user1:user1_id (id, name, image_url),
-            user2:user2_id (id, name, image_url),
-            project:project_id (
-              id,
-              title,
-              company,
-              image_url,
-              owner:owner_id (id, name, image_url)
-            )
-          )
-        `)
-        .eq('id', id)
-        .single();
-
-      if (roomError) throw roomError;
-      setRoomData(roomData);
-
-      // Get messages
-      const messages = await chatService.getMessages(id as string);
-      setMessages(messages);
-
-      // Mark messages as read
-      await chatService.markAsRead(id as string);
+      const response = await createApiRequest('/user/current', 'GET');
+      if (response.data?.id) {
+        setUserId(response.data.id);
+      } else {
+        throw new Error('ユーザーIDが取得できません');
+      }
     } catch (error) {
-      console.error('Error loading messages:', error);
-      setError('メッセージの読み込みに失敗しました');
+      console.error('Error fetching user:', error);
+      setError('ユーザー情報の取得に失敗しました');
+    }
+  }, []);
+
+  const fetchMessages = useCallback(async () => {
+    if (!id) return;
+    
+    try {
+      const response = await createApiRequest(`/chat/${id}/messages`, 'GET');
+      if (response.data) {
+        setMessages(response.data.messages);
+        setRoom(response.data.room);
+        setError(null);
+      } else {
+        throw new Error('メッセージを取得できません');
+      }
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      setError('メッセージの取得に失敗しました');
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
-  const handleSend = async () => {
-    if (newMessage.trim() === '') return;
+  useEffect(() => {
+    fetchCurrentUser();
+    fetchMessages();
+
+    // メッセージの定期更新
+    intervalRef.current = setInterval(fetchMessages, 3000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [fetchCurrentUser, fetchMessages]);
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || sending) return;
 
     try {
-      await chatService.sendMessage(id as string, newMessage);
+      setSending(true);
+      await createApiRequest(`/chat/${id}/messages`, 'POST', {
+        content: newMessage.trim()
+      });
       setNewMessage('');
+      await fetchMessages();
     } catch (error) {
       console.error('Error sending message:', error);
-      setError('メッセージの送信に失敗しました');
+      Alert.alert('エラー', 'メッセージの送信に失敗しました');
+    } finally {
+      setSending(false);
     }
   };
 
-  const formatTime = (timestamp: string) => {
+  const formatTime = useCallback((timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString('ja-JP', {
       hour: '2-digit',
       minute: '2-digit',
     });
-  };
+  }, []);
 
-  const renderMessage = ({ item }: { item: ChatMessage }) => {
-    const isUser = item.senderId === userId;
+  const renderMessage = useCallback(({ item }: { item: ChatMessage }) => {
+    const isUser = item.sender_id === userId;
 
     return (
       <View style={[styles.messageContainer, isUser ? styles.userMessage : styles.otherMessage]}>
-        {!isUser && roomData?.match?.user2 && (
-          <Image source={{ uri: roomData.match.user2.image_url }} style={styles.avatar} />
+        {!isUser && room?.match?.user2 && (
+          <Image 
+            source={{ uri: room.match.user2.image_url || DEFAULT_ICON_URL }} 
+            style={styles.avatar}
+          />
         )}
         <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.otherBubble]}>
           <Text style={[styles.messageText, isUser ? styles.userText : styles.otherText]}>
             {item.content}
           </Text>
           <View style={styles.messageFooter}>
-            <Text style={styles.timestamp}>{formatTime(item.createdAt)}</Text>
+            <Text style={styles.timestamp}>{formatTime(item.created_at)}</Text>
             {isUser && (
-              <Text style={[styles.readStatus, item.readAt ? styles.read : styles.unread]}>
-                {item.readAt ? '既読' : '未読'}
+              <Text style={[styles.readStatus, item.read_at ? styles.read : styles.unread]}>
+                {item.read_at ? '既読' : '未読'}
               </Text>
             )}
           </View>
         </View>
       </View>
     );
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <Text>読み込み中...</Text>
-      </View>
-    );
-  }
+  }, [userId, room, formatTime]);
 
   if (error) {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchMessages}>
+          <Text style={styles.retryButtonText}>再試行</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
-  if (!roomData) {
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#6366f1" />
+      </View>
+    );
+  }
+
+  if (!room) {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>チャットが見つかりません</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
+          <Text style={styles.retryButtonText}>戻る</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
-  const chatPartner = roomData.match.project
+  const chatPartner = room.match.project
     ? {
-        name: roomData.match.project.title,
-        image: roomData.match.project.image_url,
-        title: roomData.match.project.company,
+        name: room.match.project.title,
+        image: room.match.project.image_url,
+        title: room.match.project.company,
       }
     : {
-        name: roomData.match.user2.name,
-        image: roomData.match.user2.image_url,
-        title: roomData.match.user2.title,
+        name: room.match.user2.name,
+        image: room.match.user2.image_url,
+        title: room.match.user2.title,
       };
 
   return (
@@ -178,10 +202,15 @@ export default function ChatScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ArrowLeft size={24} color="#1f2937" />
         </TouchableOpacity>
-        <Image source={{ uri: chatPartner.image }} style={styles.partnerAvatar} />
+        <Image 
+          source={{ uri: chatPartner.image || DEFAULT_ICON_URL }} 
+          style={styles.partnerAvatar}
+        />
         <View style={styles.partnerInfo}>
-          <Text style={styles.partnerName}>{chatPartner.name}</Text>
-          <Text style={styles.partnerTitle}>{chatPartner.title}</Text>
+          <Text style={styles.partnerName} numberOfLines={1}>{chatPartner.name}</Text>
+          {chatPartner.title && (
+            <Text style={styles.partnerTitle} numberOfLines={1}>{chatPartner.title}</Text>
+          )}
         </View>
       </View>
 
@@ -193,25 +222,39 @@ export default function ChatScreen() {
         contentContainerStyle={styles.messagesList}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        initialNumToRender={15}
+        maxToRenderPerBatch={10}
+        windowSize={10}
       />
 
       <View style={styles.inputContainer}>
-        <TouchableOpacity style={styles.attachButton}>
+        <TouchableOpacity 
+          style={[styles.attachButton, sending && styles.buttonDisabled]}
+          disabled={sending}
+        >
           <ImageIcon size={24} color="#6366f1" />
         </TouchableOpacity>
         <TextInput
-          style={styles.input}
+          style={[styles.input, sending && styles.inputDisabled]}
           value={newMessage}
           onChangeText={setNewMessage}
           placeholder="メッセージを入力..."
           multiline
           maxLength={1000}
+          editable={!sending}
         />
         <TouchableOpacity
-          style={[styles.sendButton, newMessage.trim() === '' && styles.sendButtonDisabled]}
-          onPress={handleSend}
-          disabled={newMessage.trim() === ''}>
-          <Send size={20} color={newMessage.trim() === '' ? '#9ca3af' : '#ffffff'} />
+          style={[
+            styles.sendButton,
+            (newMessage.trim() === '' || sending) && styles.sendButtonDisabled
+          ]}
+          onPress={sendMessage}
+          disabled={newMessage.trim() === '' || sending}>
+          {sending ? (
+            <ActivityIndicator size="small" color="#ffffff" />
+          ) : (
+            <Send size={20} color={newMessage.trim() === '' ? '#9ca3af' : '#ffffff'} />
+          )}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -255,26 +298,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1f2937',
   },
-  onlineStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  online: {
-    backgroundColor: '#10b981',
-  },
-  offline: {
-    backgroundColor: '#9ca3af',
-  },
-  statusText: {
+  partnerTitle: {
     fontSize: 12,
     color: '#6b7280',
+    marginTop: 2,
   },
   messagesList: {
     padding: 16,
@@ -385,12 +412,15 @@ const styles = StyleSheet.create({
       android: {
         elevation: 4,
       },
-      web: {
-        boxShadow: '0 2px 4px rgba(99, 102, 241, 0.2)',
-      },
     }),
   },
   sendButtonDisabled: {
+    backgroundColor: '#e5e7eb',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  inputDisabled: {
     backgroundColor: '#e5e7eb',
   },
   errorText: {
@@ -399,18 +429,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
   },
-  imageOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-    paddingBottom: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  retryButton: {
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 16,
+    alignSelf: 'center',
   },
-  partnerTitle: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 2,
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

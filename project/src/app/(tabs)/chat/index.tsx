@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Platform } f
 import { useRouter } from 'expo-router';
 import { Heart, Star } from 'lucide-react-native';
 import { chatService } from '@/lib/chat';
-import { supabase } from '@/lib/supabase';
+import { createApiRequest, DEFAULT_ICON_URL } from '@/lib/api-client';
 
 export default function ChatListScreen() {
   const router = useRouter();
@@ -14,41 +14,24 @@ export default function ChatListScreen() {
 
   useEffect(() => {
     // Get current user ID
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setUserId(user.id);
-      }
-    });
+    createApiRequest('/user/current', 'GET')
+      .then(response => {
+        if (response.data?.id) {
+          setUserId(response.data.id);
+        }
+      })
+      .catch(error => {
+        console.error('Error getting user:', error);
+      });
 
     loadRooms();
-    const subscription = chatService.subscribeToRooms((room) => {
-      setRooms(prev => {
-        const index = prev.findIndex(r => r.id === room.id);
-        if (index >= 0) {
-          const newRooms = [...prev];
-          newRooms[index] = { ...newRooms[index], ...room };
-          return newRooms.sort((a, b) => 
-            new Date(b.last_message_at || b.created_at).getTime() - 
-            new Date(a.last_message_at || a.created_at).getTime()
-          );
-        }
-        return [...prev, room].sort((a, b) => 
-          new Date(b.last_message_at || b.created_at).getTime() - 
-          new Date(a.last_message_at || a.created_at).getTime()
-        );
-      });
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const loadRooms = async () => {
     try {
       setLoading(true);
       setError(null);
-      const rooms = await chatService.getRooms();
+      const rooms = await chatService.getChatRooms();
       setRooms(rooms);
     } catch (error) {
       console.error('Error loading rooms:', error);
@@ -88,16 +71,16 @@ export default function ChatListScreen() {
     const chatPartner = isProject
       ? {
           name: item.match.project.title,
-          image: item.match.project.image_url,
+          image: item.match.project.image_url || DEFAULT_ICON_URL,
           title: item.match.project.company,
         }
       : {
           name: item.match.user1.id === userId
             ? item.match.user2.name
             : item.match.user1.name,
-          image: item.match.user1.id === userId
+          image: (item.match.user1.id === userId
             ? item.match.user2.image_url
-            : item.match.user1.image_url,
+            : item.match.user1.image_url) || DEFAULT_ICON_URL,
           title: item.match.user1.id === userId
             ? item.match.user2.title
             : item.match.user1.title,

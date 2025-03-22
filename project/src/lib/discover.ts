@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { createApiRequest } from './api-client';
 
 export type Profile = {
   id: string;
@@ -31,68 +31,24 @@ export type Project = {
 
 export const discoverService = {
   async getProfiles() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    // Get profiles that haven't been swiped yet
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .not('id', 'eq', user.id)
-      .not(
-        'id',
-        'in',
-        supabase
-          .from('swipe_actions')
-          .select('target_id')
-          .eq('user_id', user.id)
-      )
-      .eq('type', 'engineer')
-      .limit(10);
-
-    if (error) throw error;
-    return data;
+    const response = await createApiRequest('/discover/profiles', 'GET');
+    if (!response.data) throw new Error('プロフィールの取得に失敗しました');
+    return response.data;
   },
 
   async getProjects() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    // Get active projects that haven't been swiped yet
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*, owner:profiles!projects_owner_id_fkey(*)')
-      .eq('status', 'active')
-      .not(
-        'id',
-        'in',
-        supabase
-          .from('swipe_actions')
-          .select('project_id')
-          .eq('user_id', user.id)
-      )
-      .limit(10);
-
-    if (error) throw error;
-    return data;
+    const response = await createApiRequest('/discover/projects', 'GET');
+    if (!response.data) throw new Error('プロジェクトの取得に失敗しました');
+    return response.data;
   },
 
   async swipe(targetId: string | null, projectId: string | null, action: 'like' | 'superlike' | 'skip') {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    const { data, error } = await supabase
-      .from('swipe_actions')
-      .insert({
-        user_id: user.id,
-        target_id: targetId,
-        project_id: projectId,
-        action,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
+    const response = await createApiRequest('/discover/swipe', 'POST', {
+      target_id: targetId,
+      project_id: projectId,
+      action,
+    });
+    if (!response.data) throw new Error('スワイプアクションの保存に失敗しました');
+    return response.data;
   },
 };

@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image,
 import { useRouter } from 'expo-router';
 import { Save, X, MapPin, Users, Clock, CreditCard, Plus, Upload, ArrowLeft } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '@/lib/supabase';
 
 const PROJECT_TYPES = [
   'ハッカソン',

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Image, Alert, KeyboardAvoidingView } from 'react-native';
 import { X, Upload, MapPin, Users, Clock, CreditCard, Activity, ChevronDown } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { createApiRequest } from '@/lib/api-client';
 import * as ImagePicker from 'expo-image-picker';
 
 const LOCATIONS = [
@@ -95,43 +95,26 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
         const file = result.assets[0];
         const fileExt = file.uri.split('.').pop();
         const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = `${fileName}`;
-
-        // バケットが存在しない場合は作成
-        const { data: buckets } = await supabase.storage.listBuckets();
-        const projectImagesBucket = buckets?.find(bucket => bucket.name === 'project-images');
-        
-        if (!projectImagesBucket) {
-          const { error: createBucketError } = await supabase.storage.createBucket('project-images', {
-            public: true,
-            allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif'],
-          });
-          if (createBucketError) throw createBucketError;
-        }
 
         // 画像をアップロード
         const response = await fetch(file.uri);
         const blob = await response.blob();
 
         // ユーザーIDを取得
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('ユーザーが見つかりません');
+        const userResponse = await createApiRequest('/user/current', 'GET');
+        if (!userResponse.data?.id) throw new Error('ユーザーが見つかりません');
 
-        const { error: uploadError } = await supabase.storage
-          .from('project-images')
-          .upload(`${user.id}/${filePath}`, blob, {
-            contentType: `image/${fileExt}`,
-            cacheControl: '3600',
-            upsert: false,
-          });
+        const formData = new FormData();
+        formData.append('file', {
+          uri: file.uri,
+          type: `image/${fileExt}`,
+          name: fileName,
+        } as any);
 
-        if (uploadError) throw uploadError;
+        const uploadResponse = await createApiRequest('/upload/project-image', 'POST', formData);
+        if (!uploadResponse.data?.url) throw new Error('画像のアップロードに失敗しました');
 
-        const { data: { publicUrl } } = supabase.storage
-          .from('project-images')
-          .getPublicUrl(`${user.id}/${filePath}`);
-
-        setFormData(prev => ({ ...prev, image_url: publicUrl }));
+        setFormData(prev => ({ ...prev, image_url: uploadResponse.data.url }));
       }
     } catch (error) {
       console.error('Error uploading image:', error);
@@ -150,40 +133,30 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
 
   const handleSubmit = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('ユーザーが見つかりません');
+      const userResponse = await createApiRequest('/user/current', 'GET');
+      if (!userResponse.data?.id) throw new Error('ユーザーが見つかりません');
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('location')
-        .eq('id', user.id)
-        .single();
+      const profileResponse = await createApiRequest('/user/profile', 'GET');
+      if (!profileResponse.data?.location) throw new Error('プロフィールが見つかりません');
 
-      if (!profile) throw new Error('プロフィールが見つかりません');
+      const projectData = {
+        owner_id: userResponse.data.id,
+        title: formData.title,
+        school: profileResponse.data.location,
+        image_url: formData.image_url,
+        location: formData.location,
+        description: formData.description,
+        team_size: formData.team_size,
+        duration: formData.duration,
+        budget: formData.budget,
+        status: formData.status,
+        skills: formData.skills,
+      };
 
-      const { data, error } = await supabase
-        .from('projects')
-        .insert([
-          {
-            owner_id: user.id,
-            title: formData.title,
-            school: profile.location,
-            image_url: formData.image_url,
-            location: formData.location,
-            description: formData.description,
-            team_size: formData.team_size,
-            duration: formData.duration,
-            budget: formData.budget,
-            status: formData.status,
-            skills: formData.skills,
-          },
-        ])
-        .select()
-        .single();
+      const response = await createApiRequest('/projects', 'POST', projectData);
+      if (!response.data) throw new Error('プロジェクトの作成に失敗しました');
 
-      if (error) throw error;
-
-      onSubmit(data);
+      onSubmit(response.data);
       setFormData({
         title: '',
         school: '',

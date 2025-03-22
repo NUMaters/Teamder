@@ -90,6 +90,11 @@ const prefectures = [
 // 年齢の選択肢
 const AGES = Array.from({ length: 11 }, (_, i) => (i + 15).toString());
 
+// 画像の型定義
+type ImageType = {
+  uri: string;
+};
+
 export default function SetupScreen() {
   const router = useRouter();
   const { token } = useLocalSearchParams();
@@ -109,14 +114,14 @@ export default function SetupScreen() {
   });
 
   // 画像の状態とデフォルト画像のURIを定義
-  const defaultImages = {
-    icon: require('../../../assets/images/default-icon.png'),
-    cover: require('../../../assets/images/default-cover.png'),
+  const defaultImages: Record<'icon' | 'cover', string> = {
+    icon: 'https://teamder-aws.s3.us-west-2.amazonaws.com/icon.png',
+    cover: 'https://teamder-aws.s3.us-west-2.amazonaws.com/default-cover.png',
   };
 
-  const [images, setImages] = useState({
-    icon: defaultImages.icon,
-    cover: defaultImages.cover,
+  const [images, setImages] = useState<Record<'icon' | 'cover', ImageType>>({
+    icon: { uri: defaultImages.icon },
+    cover: { uri: defaultImages.cover },
   });
 
   // スキル選択のモーダル状態
@@ -160,7 +165,7 @@ export default function SetupScreen() {
   const removeImage = (type: 'icon' | 'cover') => {
     setImages(prev => ({
       ...prev,
-      [type]: defaultImages[type]
+      [type]: { uri: defaultImages[type] }
     }));
   };
 
@@ -280,6 +285,10 @@ export default function SetupScreen() {
     }
   };
 
+  const handleImageComparison = (type: 'icon' | 'cover', imageUri: string) => {
+    return imageUri === defaultImages[type];
+  };
+
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -302,7 +311,7 @@ export default function SetupScreen() {
 
         <View style={styles.coverImageContainer}>
           <Image 
-            source={typeof images.cover === 'string' ? { uri: images.cover } : images.cover}
+            source={images.cover}
             style={styles.coverImage}
             resizeMode="cover"
           />
@@ -311,14 +320,14 @@ export default function SetupScreen() {
             onPress={() => pickImage('cover')}>
             <Camera size={20} color="#fff" />
             <Text style={styles.imageButtonText}>
-              {images.cover === defaultImages.cover ? 'カバー画像を選択' : 'カバー画像を変更'}
+              {handleImageComparison('cover', images.cover.uri) ? 'カバー画像を選択' : 'カバー画像を変更'}
             </Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.profileImageContainer}>
           <Image 
-            source={typeof images.icon === 'string' ? { uri: images.icon } : images.icon}
+            source={images.icon}
             style={styles.profileImage}
             resizeMode="cover"
           />
@@ -327,7 +336,7 @@ export default function SetupScreen() {
             onPress={() => pickImage('icon')}>
             <Camera size={20} color="#fff" />
             <Text style={styles.imageButtonText}>
-              {images.icon === defaultImages.icon ? 'プロフィール画像を選択' : 'プロフィール画像を変更'}
+              {handleImageComparison('icon', images.icon.uri) ? 'プロフィール画像を選択' : 'プロフィール画像を変更'}
             </Text>
           </TouchableOpacity>
         </View>

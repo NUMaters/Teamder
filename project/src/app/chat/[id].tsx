@@ -11,170 +11,67 @@ import {
   Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
 import { Send, ArrowLeft } from 'lucide-react-native';
+import { createApiRequest, DEFAULT_ICON_URL } from '@/lib/api-client';
+import { ChatMessage, ChatRoom, chatService } from '@/lib/chat';
 
-interface Message {
-  id: string;
-  content: string;
-  sender_id: string;
-  created_at: string;
-  read_at: string | null;
-}
-
-interface ChatRoom {
-  id: string;
-  match: {
-    user1_id: string;
-    user2_id: string;
-    project: {
-      title: string;
-      company: string;
-    };
-  };
-}
-
-export default function ChatRoomScreen() {
+export default function ChatScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [chatRoom, setChatRoom] = useState<ChatRoom | null>(null);
-  const [otherUser, setOtherUser] = useState<any>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [room, setRoom] = useState<ChatRoom | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    fetchChatRoom();
-    const messageSubscription = supabase
-      .channel('chat_messages')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `room_id=eq.${id}`,
-        },
-        (payload) => {
-          const newMessage = payload.new as Message;
-          setMessages((prev) => [...prev, newMessage]);
-          flatListRef.current?.scrollToEnd();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      messageSubscription.unsubscribe();
-    };
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000);
+    return () => clearInterval(interval);
   }, [id]);
 
-  const fetchChatRoom = async () => {
+  const fetchMessages = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setCurrentUser(user);
-
-      const { data: roomData, error: roomError } = await supabase
-        .from('chat_rooms')
-        .select(`
-          id,
-          matches (
-            user1_id,
-            user2_id,
-            projects (
-              title,
-              company
-            )
-          )
-        `)
-        .eq('id', id)
-        .single();
-
-      if (roomError) throw roomError;
-      setChatRoom(roomData);
-
-      // 相手のユーザー情報を取得
-      const otherUserId = roomData.matches.user1_id === user.id
-        ? roomData.matches.user2_id
-        : roomData.matches.user1_id;
-
-      const { data: userData, error: userError } = await supabase
-        .from('profiles')
-        .select('id, name, avatar_url')
-        .eq('id', otherUserId)
-        .single();
-
-      if (userError) throw userError;
-      setOtherUser(userData);
-
-      // メッセージを取得
-      const { data: messagesData, error: messagesError } = await supabase
-        .from('chat_messages')
-        .select('*')
-        .eq('room_id', id)
-        .order('created_at', { ascending: true });
-
-      if (messagesError) throw messagesError;
-      setMessages(messagesData);
-
-      // 未読メッセージを既読にする
-      await supabase
-        .from('chat_messages')
-        .update({ read_at: new Date().toISOString() })
-        .eq('room_id', id)
-        .eq('sender_id', otherUserId)
-        .is('read_at', null);
-
+      const response = await chatService.fetchMessages(id as string);
+      setMessages(response);
+      
+      if (!room) {
+        const roomResponse = await chatService.fetchRoom(id as string);
+        setRoom(roomResponse);
+      }
     } catch (error) {
-      console.error('Error fetching chat room:', error);
+      console.error('Error fetching messages:', error);
     }
   };
 
   const handleSend = async () => {
-    if (!newMessage.trim() || !currentUser) return;
+    if (!message.trim()) return;
 
     try {
-      const { error } = await supabase
-        .from('chat_messages')
-        .insert({
-          room_id: id,
-          sender_id: currentUser.id,
-          content: newMessage.trim(),
-        });
-
-      if (error) throw error;
-      setNewMessage('');
+      await chatService.sendMessage(id as string, message);
+      setMessage('');
+      fetchMessages();
     } catch (error) {
       console.error('Error sending message:', error);
     }
   };
 
-  const formatMessageTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isOwnMessage = item.sender_id === currentUser?.id;
+  const renderMessage = ({ item }: { item: ChatMessage }) => {
+    const isOwnMessage = item.sender_id === 'current_user_id'; // TODO: 実際のユーザーIDを使用
 
     return (
       <View style={[
         styles.messageContainer,
-        isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer
+        isOwnMessage ? styles.ownMessage : styles.otherMessage
       ]}>
         {!isOwnMessage && (
           <Image
-            source={{ uri: otherUser?.avatar_url }}
+            source={{ uri: room?.match?.image_url || DEFAULT_ICON_URL }}
             style={styles.avatar}
           />
         )}
         <View style={[
           styles.messageBubble,
-          isOwnMessage ? styles.ownMessageBubble : styles.otherMessageBubble
+          isOwnMessage ? styles.ownBubble : styles.otherBubble
         ]}>
           <Text style={[
             styles.messageText,
@@ -182,25 +79,22 @@ export default function ChatRoomScreen() {
           ]}>
             {item.content}
           </Text>
+          <Text style={[
+            styles.timestamp,
+            isOwnMessage ? styles.ownTimestamp : styles.otherTimestamp
+          ]}>
+            {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
         </View>
-        <Text style={[
-          styles.messageTime,
-          isOwnMessage ? styles.ownMessageTime : styles.otherMessageTime
-        ]}>
-          {formatMessageTime(item.created_at)}
-          {isOwnMessage && item.read_at && (
-            <Text style={styles.readIndicator}>既読</Text>
-          )}
-        </Text>
       </View>
     );
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
+    <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}>
+      style={styles.container}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -208,10 +102,11 @@ export default function ChatRoomScreen() {
           <ArrowLeft size={24} color="#1f2937" />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerName}>{otherUser?.name}</Text>
-          <Text style={styles.headerProject}>
-            {chatRoom?.match?.project?.title} - {chatRoom?.match?.project?.company}
-          </Text>
+          <Image
+            source={{ uri: room?.match?.image_url || DEFAULT_ICON_URL }}
+            style={styles.headerAvatar}
+          />
+          <Text style={styles.headerName}>{room?.match?.name || 'チャット'}</Text>
         </View>
       </View>
 
@@ -220,26 +115,23 @@ export default function ChatRoomScreen() {
         data={messages}
         renderItem={renderMessage}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.messageList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+        contentContainerStyle={styles.messagesList}
+        inverted
+        onContentSizeChange={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
       />
 
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
-          value={newMessage}
-          onChangeText={setNewMessage}
+          value={message}
+          onChangeText={setMessage}
           placeholder="メッセージを入力..."
           multiline
         />
         <TouchableOpacity
-          style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]}
-          onPress={handleSend}
-          disabled={!newMessage.trim()}>
-          <Send
-            size={20}
-            color={newMessage.trim() ? '#ffffff' : '#a1a1aa'}
-          />
+          style={styles.sendButton}
+          onPress={handleSend}>
+          <Send size={20} color="#fff" />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -249,45 +141,54 @@ export default function ChatRoomScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     paddingTop: Platform.OS === 'ios' ? 60 : 16,
-    backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+    backgroundColor: '#fff',
   },
   backButton: {
-    padding: 8,
-    marginRight: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerInfo: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
   },
   headerName: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1f2937',
   },
-  headerProject: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  messageList: {
+  messagesList: {
     padding: 16,
   },
   messageContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
     marginBottom: 16,
+    alignItems: 'flex-end',
   },
-  ownMessageContainer: {
+  ownMessage: {
     justifyContent: 'flex-end',
   },
-  otherMessageContainer: {
+  otherMessage: {
     justifyContent: 'flex-start',
   },
   avatar: {
@@ -301,17 +202,17 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 16,
   },
-  ownMessageBubble: {
+  ownBubble: {
     backgroundColor: '#6366f1',
     borderBottomRightRadius: 4,
   },
-  otherMessageBubble: {
-    backgroundColor: '#fff',
+  otherBubble: {
+    backgroundColor: '#f3f4f6',
     borderBottomLeftRadius: 4,
   },
   messageText: {
     fontSize: 16,
-    lineHeight: 20,
+    marginBottom: 4,
   },
   ownMessageText: {
     color: '#fff',
@@ -319,55 +220,40 @@ const styles = StyleSheet.create({
   otherMessageText: {
     color: '#1f2937',
   },
-  messageTime: {
+  timestamp: {
     fontSize: 12,
-    marginTop: 4,
   },
-  ownMessageTime: {
-    color: '#9ca3af',
-    marginLeft: 8,
+  ownTimestamp: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'right',
   },
-  otherMessageTime: {
-    color: '#9ca3af',
-    marginRight: 8,
-  },
-  readIndicator: {
-    fontSize: 12,
-    color: '#6366f1',
-    marginLeft: 4,
+  otherTimestamp: {
+    color: '#6b7280',
   },
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
     padding: 16,
-    backgroundColor: '#fff',
+    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
+    backgroundColor: '#fff',
   },
   input: {
     flex: 1,
-    minHeight: 40,
-    maxHeight: 120,
     backgroundColor: '#f3f4f6',
-    borderRadius: 20,
+    borderRadius: 24,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    paddingRight: 48,
+    marginRight: 12,
     fontSize: 16,
-    color: '#1f2937',
+    maxHeight: 100,
   },
   sendButton: {
-    position: 'absolute',
-    right: 24,
-    bottom: 24,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#6366f1',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#e5e7eb',
   },
 }); 

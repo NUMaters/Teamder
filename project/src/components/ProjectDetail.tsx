@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Image, ScrollView, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../lib/supabase';
+import { createApiRequest } from '@/lib/api-client';
 import ProfileCard from './ProfileCard';
-import { X } from 'lucide-react';
+import { X } from 'lucide-react-native';
+import { DEFAULT_COVER_URL } from '@/lib/api-client';
 
 type ProjectDetailProps = {
   projectId: string;
@@ -23,14 +24,11 @@ export default function ProjectDetail() {
 
   const fetchProject = async () => {
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('id', projectId)
-        .single();
-
-      if (error) throw error;
-      setProject(data);
+      const response = await createApiRequest(`/projects/${projectId}`, 'GET');
+      if (!response.data) {
+        throw new Error('プロジェクトの取得に失敗しました');
+      }
+      setProject(response.data);
     } catch (error) {
       console.error('Error fetching project:', error);
     }
@@ -38,14 +36,11 @@ export default function ProjectDetail() {
 
   const handleOwnerPress = async () => {
     try {
-      const { data: profileData, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', project.owner_id)
-        .single();
-
-      if (error) throw error;
-      setCreatorProfile(profileData);
+      const response = await createApiRequest(`/users/${project.owner_id}/profile`, 'GET');
+      if (!response.data) {
+        throw new Error('プロフィールの取得に失敗しました');
+      }
+      setCreatorProfile(response.data);
       setShowCreatorProfile(true);
     } catch (error) {
       console.error('Error fetching owner profile:', error);
@@ -62,7 +57,7 @@ export default function ProjectDetail() {
 
   return (
     <ScrollView style={styles.container}>
-      <Image source={{ uri: project.image_url }} style={styles.image} />
+      <Image source={{ uri: project.image_url || DEFAULT_COVER_URL }} style={styles.image} />
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>{project.title}</Text>

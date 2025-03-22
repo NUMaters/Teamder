@@ -1,30 +1,28 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { Session } from '@supabase/supabase-js';
+import { useState, useEffect } from 'react';
+import { getToken, removeToken } from '@/lib/api-client';
 
 export function useAuth() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [initialized, setInitialized] = useState(false);
+  const [session, setSession] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 初期セッションの取得
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setInitialized(true);
+    // 初期化時にトークンを確認
+    getToken().then((token) => {
+      setSession(token);
+      setLoading(false);
     });
 
-    // 認証状態の変更を監視
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+    // トークンの変更を監視
+    const checkToken = setInterval(async () => {
+      const token = await getToken();
+      setSession(token);
+    }, 1000 * 60); // 1分ごとにチェック
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => clearInterval(checkToken);
   }, []);
 
   return {
     session,
-    initialized,
+    loading,
   };
 } 

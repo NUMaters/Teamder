@@ -21,6 +21,7 @@ import {
   Building2
 } from 'lucide-react-native';
 import { ProfileData, Activity, Skill } from '@/types/profile';
+import { DEFAULT_ICON_URL, DEFAULT_COVER_URL } from '@/lib/api-client';
 
 type ProfileContentProps = {
   profile: ProfileData;
@@ -60,15 +61,13 @@ export default function ProfileContent({ profile, isOwnProfile, onEditPress }: P
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        {profile.coverUrl && (
-          <Image 
-            source={{ uri: profile.coverUrl }} 
-            style={styles.coverImage}
-            resizeMode="cover"
-          />
-        )}
         <Image 
-          source={{ uri: profile.image }} 
+          source={{ uri: profile.coverUrl || DEFAULT_COVER_URL }} 
+          style={styles.coverImage}
+          resizeMode="cover"
+        />
+        <Image 
+          source={{ uri: profile.image || DEFAULT_ICON_URL }} 
           style={styles.profileImage}
           resizeMode="cover"
         />
