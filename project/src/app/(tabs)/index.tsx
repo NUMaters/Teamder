@@ -114,7 +114,7 @@ export default function DiscoverScreen() {
     try {
       setIsLoading(true);
       const apiResponse = await axios.post(
-        `${API_GATEWAY_URL}/get_username`,
+        `${API_GATEWAY_URL}/get_profile`,
         {},
         {
           headers: {
@@ -142,7 +142,7 @@ export default function DiscoverScreen() {
       */
 
       if (apiResponse.data) {
-        const formattedProfiles: Profile[] = apiResponse.data.map(profile => ({
+        const formattedProfiles: Profile[] = [apiResponse.data].map(profile => ({
           id: profile.id,
           name: profile.name,
           title: profile.title,
