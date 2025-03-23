@@ -40,6 +40,22 @@ interface Skill {
   years: string;
 }
 
+// アクティビティの型定義
+interface Activity {
+  id?: string;
+  title: string;
+  description?: string;
+  period?: string;
+}
+
+// 資格の型定義
+interface Certification {
+  id?: string;
+  name: string;
+  issueDate?: string;
+  issuingOrganization?: string;
+}
+
 // APIからのレスポンスの型定義
 interface ApiProfile {
   id: string;
@@ -54,6 +70,10 @@ interface ApiProfile {
   skills: (string | ApiSkill)[];
   school: string;
   likes: Like[];
+  githubUsername?: string;
+  twitterUsername?: string;
+  activities?: Activity[];
+  certifications?: Certification[];
 }
 
 // アプリ内で使用するプロフィールの型定義
@@ -70,6 +90,10 @@ interface Profile {
   skills: Skill[];
   school: string;
   likes: Like[];
+  githubUsername?: string;
+  twitterUsername?: string;
+  activities?: Activity[];
+  certifications?: Certification[];
 }
 
 type Developer = {
@@ -348,7 +372,9 @@ export default function DiscoverScreen() {
         school: profile.school || '',
         likes: Array.isArray(profile.likes) ? profile.likes : [],
         githubUsername: profile.githubUsername || '',
-        twitterUsername: profile.twitterUsername || ''
+        twitterUsername: profile.twitterUsername || '',
+        activities: Array.isArray(profile.activities) ? profile.activities : [],
+        certifications: Array.isArray(profile.certifications) ? profile.certifications : []
       }));
 
       // 自分のプロフィールを除外
@@ -370,8 +396,10 @@ export default function DiscoverScreen() {
           errorMessage = '認証エラーが発生しました。再度ログインしてください';
           router.replace('/(auth)/login');
         } else if (error.response?.status === 403) {
-          errorMessage = 'アクセスが拒否されました';
-          console.error('Access denied with token:', token);
+          console.log('Permission error (403) - trying to continue with empty profile list');
+          // 403エラーの場合は空のプロフィールリストを設定して続行
+          setProfiles([]);
+          return; // エラーメッセージを表示しない
         } else if (error.code === 'ECONNABORTED') {
           errorMessage = 'タイムアウトが発生しました';
         }
@@ -398,6 +426,8 @@ export default function DiscoverScreen() {
       // 現在のユーザーIDを取得
       const currentUserId = await AsyncStorage.getItem('userId');
       console.log('Current user ID for projects:', currentUserId);
+      
+      console.log('Fetching projects with token:', token);
       
       const apiResponse = await axios.post(
         `${API_GATEWAY_URL_PROJECT}/get_all_project`,
@@ -445,11 +475,20 @@ export default function DiscoverScreen() {
     } catch (error) {
       console.error('Error fetching projects:', error);
       if (axios.isAxiosError(error)) {
+        console.error('Project fetch error details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          headers: error.config?.headers
+        });
+        
         if (error.response?.status === 401) {
           Alert.alert('エラー', '認証エラーが発生しました。再度ログインしてください。');
           router.replace('/(auth)/login');
         } else if (error.response?.status === 403) {
-          Alert.alert('エラー', 'アクセスが拒否されました');
+          console.log('Permission error (403) - trying to continue with empty project list');
+          // 403エラーの場合は空のプロジェクトリストを設定して続行
+          setProjects([]);
         } else if (error.code === 'ECONNABORTED') {
           Alert.alert('エラー', 'タイムアウトが発生しました。');
         } else {
@@ -460,6 +499,134 @@ export default function DiscoverScreen() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // 特定のプロジェクト情報を取得
+  const fetchProject = async (projectId: string) => {
+    if (!token) {
+      console.log('No token available for fetching project');
+      return null;
+    }
+
+    try {
+      console.log(`Fetching project with ID: ${projectId}`);
+      
+      const apiResponse = await axios.post(
+        `${API_GATEWAY_URL_PROJECT}/get_project`,
+        {
+          project_id: projectId
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token,
+            'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+          }
+        }
+      );
+
+      console.log('Project details API Response:', apiResponse.data);
+
+      if(apiResponse.data.error){
+        throw new Error(apiResponse.data.error);
+      }
+
+      const projectData = apiResponse.data;
+      const formattedProject: Project = {
+        id: projectData.id || '',
+        owner_id: projectData.owner_id || '',
+        title: projectData.title || '',
+        university: projectData.university || '',
+        image_url: projectData.image_url || 'https://teamder-aws.s3.us-west-2.amazonaws.com/project-placeholder.png',
+        location: projectData.location || '',
+        description: projectData.description || '',
+        team_size: projectData.team_size || '',
+        duration: projectData.duration || '',
+        budget: projectData.budget || '',
+        status: projectData.status || '募集中',
+        created_at: projectData.created_at || '',
+        updated_at: projectData.updated_at || '',
+        likes: Array.isArray(projectData.likes) ? projectData.likes : []
+      };
+      
+      return formattedProject;
+    } catch (error) {
+      console.error(`Error fetching project ${projectId}:`, error);
+      if (axios.isAxiosError(error)) {
+        console.error('Project fetch error details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          headers: error.config?.headers
+        });
+      }
+      return null;
+    }
+  };
+
+  // プロジェクト情報を設定/更新
+  const setProject = async (projectData: Partial<Project>) => {
+    if (!token) {
+      console.log('No token available for setting project');
+      return { success: false, error: 'トークンがありません' };
+    }
+
+    try {
+      console.log('Setting project data:', projectData);
+      
+      const apiResponse = await axios.post(
+        `${API_GATEWAY_URL_PROJECT}/set_project`,
+        projectData,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token,
+            'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+          }
+        }
+      );
+
+      console.log('Set project API Response:', apiResponse.data);
+
+      if(apiResponse.data.error){
+        throw new Error(apiResponse.data.error);
+      }
+
+      return { success: true, data: apiResponse.data };
+    } catch (error) {
+      console.error('Error setting project:', error);
+      if (axios.isAxiosError(error)) {
+        console.error('Project set error details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          headers: error.config?.headers
+        });
+        
+        return { 
+          success: false, 
+          error: error.response?.data?.error || error.message || 'プロジェクト情報の設定に失敗しました' 
+        };
+      }
+      return { success: false, error: 'プロジェクト情報の設定に失敗しました' };
+    }
+  };
+
+  // プロジェクト詳細を表示
+  const handleViewProject = async (project: Project) => {
+    try {
+      // まず基本情報を設定
+      setSelectedProject(project);
+      setIsProjectModalVisible(true);
+      
+      // 必要に応じて最新の詳細情報を取得
+      const latestProjectDetails = await fetchProject(project.id);
+      if (latestProjectDetails) {
+        setSelectedProject(latestProjectDetails);
+      }
+    } catch (error) {
+      console.error('Error viewing project details:', error);
     }
   };
 
@@ -638,11 +805,6 @@ export default function DiscoverScreen() {
   const handleViewProfile = (profile: Profile) => {
     setSelectedProfile(profile);
     setIsProfileModalVisible(true);
-  };
-
-  const handleViewProject = (project: Project) => {
-    setSelectedProject(project);
-    setIsProjectModalVisible(true);
   };
 
   const handleAllCardsEnd = () => {
@@ -1041,8 +1203,8 @@ export default function DiscoverScreen() {
             image: selectedProfile.icon_url || '',
             coverUrl: selectedProfile.cover_url || '',
             bio: selectedProfile.bio || '',
-            githubUsername: '',
-            twitterUsername: '',
+            githubUsername: selectedProfile.githubUsername || '',
+            twitterUsername: selectedProfile.twitterUsername || '',
             interests: selectedProfile.interests || [],
             skills: (selectedProfile.skills || []).map(skill => {
               if (typeof skill === 'string') {
@@ -1063,8 +1225,12 @@ export default function DiscoverScreen() {
             }),
             age: String(selectedProfile.age || ''),
             university: selectedProfile.school || '',
-            activities: [],
-            certifications: []
+            activities: Array.isArray(selectedProfile.activities) 
+              ? selectedProfile.activities.map(activity => typeof activity === 'string' ? activity : activity.title)
+              : [],
+            certifications: Array.isArray(selectedProfile.certifications)
+              ? selectedProfile.certifications.map(cert => typeof cert === 'string' ? cert : cert.name)
+              : []
           }}
           isOwnProfile={false}
         />
@@ -1084,10 +1250,54 @@ export default function DiscoverScreen() {
       <CreateProjectModal
         isVisible={isCreateProjectModalVisible}
         onClose={() => setIsCreateProjectModalVisible(false)}
-        onSubmit={(projectData) => {
-          console.log('New project:', projectData);
+        onSubmit={async (projectData) => {
+          // プロジェクトデータを詳細にログ出力
+          console.log('New project data:', JSON.stringify(projectData, null, 2));
           setIsCreateProjectModalVisible(false);
-          fetchProjects();
+          
+          try {
+            setIsLoading(true);
+            
+            // ユーザーIDを取得
+            const userId = await AsyncStorage.getItem('userId');
+            if (!userId) {
+              Alert.alert('エラー', 'ユーザー情報が取得できません。再度ログインしてください。');
+              return;
+            }
+            
+            // プロジェクトデータをAPI形式に変換
+            const apiProjectData = {
+              owner_id: userId,
+              title: projectData.title,
+              university: projectData.school || '',
+              image_url: projectData.image_url || 'https://teamder-aws.s3.us-west-2.amazonaws.com/project-placeholder.png',
+              location: projectData.location || '',
+              description: projectData.description || '',
+              team_size: projectData.team_size || '',
+              duration: projectData.duration || '',
+              budget: projectData.budget || '',
+              status: projectData.status || '募集中',
+              skills: projectData.skills || []
+            };
+            
+            console.log('API送信用プロジェクトデータ:', apiProjectData);
+            
+            // APIを呼び出してプロジェクト作成
+            const result = await setProject(apiProjectData);
+            
+            if (result.success) {
+              Alert.alert('成功', 'プロジェクトが作成されました');
+              // プロジェクト一覧を再取得
+              fetchProjects();
+            } else {
+              Alert.alert('エラー', result.error || 'プロジェクトの作成に失敗しました');
+            }
+          } catch (error) {
+            console.error('Error creating project:', error);
+            Alert.alert('エラー', 'プロジェクトの作成中にエラーが発生しました');
+          } finally {
+            setIsLoading(false);
+          }
         }}
       />
     </View>
