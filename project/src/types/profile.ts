@@ -30,29 +30,21 @@ export type ProfileData = {
   certifications: string[];
 };
 
-export interface Profile {
+export type Profile = {
   id: string;
   username: string;
+  age?: number;
+  bio: string;
+  location: string;
+  email: string;
+  icon_url: string;
+  cover_url: string;
+  interests: string[];
+  skills: string[];
+  school: string;
   title?: string;
-  location?: string;
-  email?: string;
   website?: string;
-  image?: string;
-  coverUrl?: string;
-  bio?: string;
-  university?: string;
   githubUsername?: string;
   twitterUsername?: string;
-  interests?: string[];
-  skills?: { name: string; years: string }[];
-  created_at: string;
-  updated_at: string;
-  age?: number;
-  activities?: {
-    id: string;
-    title: string;
-    period: string;
-    description: string;
-    link?: string;
-  }[];
-}
+  activities?: string[];
+};

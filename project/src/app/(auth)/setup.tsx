@@ -5,6 +5,7 @@ import { Camera, Upload, X, ChevronDown, Code2 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 環境変数の型定義
 const API_GATEWAY_URL = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
@@ -111,11 +112,13 @@ export default function SetupScreen() {
     bio: '',
     skills: [] as Array<{ id: string; years: string }>,
     interests: [] as string[],
+    twitterUsername: '',
+    githubUsername: '',
   });
 
   // 画像の状態とデフォルト画像のURIを定義
   const defaultImages: Record<'icon' | 'cover', string> = {
-    icon: 'https://teamder-aws.s3.us-west-2.amazonaws.com/icon.png',
+    icon: 'https://teamder-aws.s3.us-west-2.amazonaws.com/default-icon.png',
     cover: 'https://teamder-aws.s3.us-west-2.amazonaws.com/default-cover.png',
   };
 
@@ -135,10 +138,24 @@ export default function SetupScreen() {
   const [showAgePicker, setShowAgePicker] = useState(false);
 
   useEffect(() => {
-    if (!token) {
-      router.replace('/(auth)/register');
-    }
-  }, [token]);
+    // トークンの存在確認
+    const checkToken = async () => {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        if (!token) {
+          console.log('No token found in setup');
+          router.replace('/(auth)/register');
+          return;
+        }
+        console.log('Token found in setup:', token);
+      } catch (error) {
+        console.error('Error checking token:', error);
+        router.replace('/(auth)/register');
+      }
+    };
+
+    checkToken();
+  }, []);
 
   const pickImage = async (type: 'icon' | 'cover') => {
     try {
@@ -221,40 +238,87 @@ export default function SetupScreen() {
 
     try {
       setLoading(true);
-      setError(null);
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        Alert.alert('エラー', '認証情報が見つかりません。再度ログインしてください。');
+        router.replace('/(auth)/login');
+        return;
+      }
 
       // 画像のアップロード処理
-      let iconUrl = null;
-      let coverUrl = null;
+      const uploadImage = async (type: 'icon' | 'cover') => {
+        if (images[type].uri === defaultImages[type]) {
+          return defaultImages[type];
+        }
 
-      if (images.icon) {
-        const iconFormData = new FormData();
-        iconFormData.append('file', {
-          uri: images.icon.uri,
-          type: 'image/jpeg',
-          name: 'icon.jpg',
+        const fileExt = images[type].uri.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+
+        const formData = new FormData();
+        formData.append('file', {
+          uri: images[type].uri,
+          type: `image/${fileExt}`,
+          name: fileName,
         } as any);
-        // アイコン画像のアップロード処理
+
+        try {
+          const response = await axios.post(
+            `${API_GATEWAY_URL}${type === 'icon' ? '/upload/profile-image' : '/upload/cover-image'}`,
+            formData,
+            {
+              headers: {
+                'Content-Type': 'multipart/form-data',
+                'Authorization': `Bearer ${token}`,
+                'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+              },
+              timeout: 10000,
+            }
+          );
+
+          if (response.data?.url) {
+            return response.data.url;
+          }
+          throw new Error('画像URLが返されませんでした');
+        } catch (error) {
+          console.error(`Error uploading ${type} image:`, error);
+          throw error;
+        }
+      };
+
+      // 画像のアップロード
+      let iconUrl = defaultImages.icon;
+      let coverUrl = defaultImages.cover;
+
+      try {
+        if (images.icon.uri !== defaultImages.icon) {
+          iconUrl = await uploadImage('icon');
+        }
+        if (images.cover.uri !== defaultImages.cover) {
+          coverUrl = await uploadImage('cover');
+        }
+      } catch (error) {
+        console.error('Image upload error:', error);
+        Alert.alert('警告', '画像のアップロードに失敗しましたが、プロフィールの保存は続行します。');
       }
 
-      if (images.cover) {
-        const coverFormData = new FormData();
-        coverFormData.append('file', {
-          uri: images.cover.uri,
-          type: 'image/jpeg',
-          name: 'cover.jpg',
-        } as any);
-        // カバー画像のアップロード処理
-      }
+      // プロフィールデータの作成
+      const profileData = {
+        ...formData,
+        icon_url: iconUrl,
+        cover_url: coverUrl,
+        skills: formData.skills.map(skill => ({
+          name: skill.id,
+          years: skill.years
+        })),
+        twitterUsername: formData.twitterUsername?.replace('@', '').trim(),
+        githubUsername: formData.githubUsername?.replace('@', '').trim(),
+      };
 
-      // API Gatewayにリクエストを送信
-      const apiResponse = await axios.post(
+      console.log('Sending profile data:', profileData);
+
+      const response = await axios.post(
         `${API_GATEWAY_URL}/set_profile`,
-        {
-          ...formData,
-          icon_url: iconUrl,
-          cover_url: coverUrl,
-        },
+        profileData,
         {
           headers: {
             'Content-Type': 'application/json',
@@ -263,22 +327,26 @@ export default function SetupScreen() {
         }
       );
 
-      if (apiResponse.data.success) {
-        //router.replace('/(tabs)/index');
-        router.push({
-          pathname: '/(tabs)',
-          params: { token: token }
-        });
-      } else {
-        throw new Error('プロフィールの設定に失敗しました');
+      console.log('Profile setup response:', response.data);
+
+      if (response.data.error) {
+        throw new Error(response.data.error);
       }
+
+      // プロフィール設定が成功したら、トークンを保持したまま画面遷移
+      router.replace('/(tabs)');
     } catch (error) {
-      console.error('Setup error:', error);
+      console.error('Error setting up profile:', error);
       if (axios.isAxiosError(error)) {
-        const errorMessage = error.response?.data?.message || 'プロフィールの設定に失敗しました';
-        setError(errorMessage);
+        if (error.response?.status === 403) {
+          Alert.alert('エラー', '認証エラーが発生しました。再度ログインしてください。');
+          await AsyncStorage.removeItem('userToken');
+          router.replace('/(auth)/login');
+        } else {
+          Alert.alert('エラー', 'プロフィールの設定に失敗しました。');
+        }
       } else {
-        setError('予期せぬエラーが発生しました。もう一度お試しください。');
+        Alert.alert('エラー', 'プロフィールの設定に失敗しました。');
       }
     } finally {
       setLoading(false);
@@ -472,6 +540,52 @@ export default function SetupScreen() {
                 </Text>
               </TouchableOpacity>
             ))}
+          </View>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Twitter ユーザーネーム</Text>
+          <View style={styles.socialInputContainer}>
+            <Text style={styles.socialPrefix}>@</Text>
+            <TextInput
+              style={[
+                styles.socialInput,
+                focusedInput === 'twitter' && styles.inputFocused
+              ]}
+              value={formData.twitterUsername}
+              onChangeText={(text) => setFormData(prev => ({ 
+                ...prev, 
+                twitterUsername: text.replace('@', '') 
+              }))}
+              onFocus={() => setFocusedInput('twitter')}
+              onBlur={() => setFocusedInput(null)}
+              placeholder="Twitterユーザーネーム"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>GitHub ユーザーネーム</Text>
+          <View style={styles.socialInputContainer}>
+            <Text style={styles.socialPrefix}>@</Text>
+            <TextInput
+              style={[
+                styles.socialInput,
+                focusedInput === 'github' && styles.inputFocused
+              ]}
+              value={formData.githubUsername}
+              onChangeText={(text) => setFormData(prev => ({ 
+                ...prev, 
+                githubUsername: text.replace('@', '') 
+              }))}
+              onFocus={() => setFocusedInput('github')}
+              onBlur={() => setFocusedInput(null)}
+              placeholder="GitHubユーザーネーム"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
           </View>
         </View>
 
@@ -1010,5 +1124,24 @@ const styles = StyleSheet.create({
   ageTextActive: {
     color: '#6366f1',
     fontWeight: '500',
+  },
+  socialInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+  },
+  socialPrefix: {
+    fontSize: 16,
+    color: '#6b7280',
+    marginRight: 8,
+  },
+  socialInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1f2937',
   },
 }); 

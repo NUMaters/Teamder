@@ -3,46 +3,74 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, Dimensions, TouchableOpacity, Platform, Alert, ScrollView } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import { Code as Code2, Briefcase, MapPin, Rocket, Users, Building2, CircleUser as UserCircle2, Plus, Calendar, Clock, CreditCard, SwitchCamera, RefreshCw, Heart, Star, Settings, ListTodo, RotateCcw } from 'lucide-react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import Animated, { withSpring, withTiming, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import ProfileModal from '@/components/ProfileModal';
 import ProjectModal from '@/components/ProjectModal';
 import CreateProjectModal from '@/components/CreateProjectModal';
-import type { ProjectFormData } from '@/components/CreateProjectModal';
-//import { supabase } from '@/lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
 const API_GATEWAY_URL = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
 const API_GATEWAY_URL_PRJ = process.env.EXPO_PUBLIC_API_GATEWAY_URL_PROJECT
 
 type Category = 'engineers' | 'projects';
-type LikeType = 'like' | 'superlike';
 
-type Like = {
+enum LikeType {
+  LIKE = 'like',
+  SUPERLIKE = 'superlike'
+}
+
+interface Like {
   userId: string;
   type: LikeType;
-};
+}
 
-type Profile = {
-  id: string;
+interface ApiInterest {
   name: string;
-  title: string;
+}
+
+interface ApiSkill {
+  name: string;
+  years: string;
+}
+
+interface Skill {
+  name: string;
+  years: string;
+}
+
+// APIからのレスポンスの型定義
+interface ApiProfile {
+  id: string;
+  username: string;
+  age: number;
+  bio: string;
   location: string;
   email: string;
-  website: string;
-  image_url: string;
+  icon_url: string;
   cover_url: string;
-  bio: string;
-  university: string;
-  github_username: string;
-  twitter_username: string;
-  interests: string[];
-  skills: string[];
-  created_at: string;
-  updated_at: string;
-  age: number;
+  interests: (string | ApiInterest)[];
+  skills: (string | ApiSkill)[];
+  school: string;
   likes: Like[];
-};
+}
+
+// アプリ内で使用するプロフィールの型定義
+interface Profile {
+  id: string;
+  username: string;
+  age: number;
+  bio: string;
+  location: string;
+  email: string;
+  icon_url: string;
+  cover_url: string;
+  interests: string[];
+  skills: Skill[];
+  school: string;
+  likes: Like[];
+}
 
 type Developer = {
   id: string;
@@ -84,9 +112,48 @@ const WINDOW_HEIGHT = Dimensions.get('window').height;
 const CARD_VERTICAL_MARGIN = 340;
 const CARD_HEIGHT = WINDOW_HEIGHT - CARD_VERTICAL_MARGIN;
 
+// モックデータを使用して開発を進める
+const MOCK_PROFILES: Profile[] = [
+  {
+    id: 'user1',
+    username: '山田太郎',
+    age: 22,
+    bio: '東京大学工学部の学生です。Web開発とAIに興味があります。',
+    location: '東京都',
+    email: 'yamada@example.com',
+    icon_url: 'https://teamder-aws.s3.us-west-2.amazonaws.com/default-icon.png',
+    cover_url: 'https://teamder-aws.s3.us-west-2.amazonaws.com/default-cover.png',
+    interests: ['Web開発', 'AI', 'モバイルアプリ'],
+    skills: [
+      { name: 'React', years: '2年' },
+      { name: 'Python', years: '3年' },
+      { name: 'TypeScript', years: '1年' }
+    ],
+    school: '東京大学',
+    likes: []
+  },
+  {
+    id: 'user2',
+    username: '鈴木花子',
+    age: 21,
+    bio: 'デザインとフロントエンド開発が得意です。',
+    location: '大阪府',
+    email: 'suzuki@example.com',
+    icon_url: 'https://teamder-aws.s3.us-west-2.amazonaws.com/default-icon.png',
+    cover_url: 'https://teamder-aws.s3.us-west-2.amazonaws.com/default-cover.png',
+    interests: ['UI/UXデザイン', 'フロントエンド開発'],
+    skills: [
+      { name: 'Figma', years: '2年' },
+      { name: 'React', years: '1年' }
+    ],
+    school: '京都大学',
+    likes: []
+  }
+];
+
 export default function DiscoverScreen() {
   const router = useRouter();
-  const { token } = useLocalSearchParams();
+  const [token, setToken] = useState<string | null>(null);
   const [category, setCategory] = useState<Category>('engineers');
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -103,88 +170,142 @@ export default function DiscoverScreen() {
   const swipeDirection = useSharedValue<'left' | 'right' | 'top' | null>(null);
 
   useEffect(() => {
-    if (category === 'engineers') {
-      fetchProfiles();
-    } else {
-      fetchProjects();
+    const initializeToken = async () => {
+      try {
+        const storedToken = await AsyncStorage.getItem('userToken');
+        if (!storedToken) {
+          console.log('No token found in index');
+          router.replace('/(auth)/login');
+          return;
+        }
+        console.log('Token initialized in index:', storedToken);
+        setToken(storedToken);
+      } catch (error) {
+        console.error('Error initializing token:', error);
+        router.replace('/(auth)/login');
+      }
+    };
+
+    initializeToken();
+  }, []);
+
+  useEffect(() => {
+    if (token) {
+      console.log('Fetching data with token:', token);
+      if (category === 'engineers') {
+        fetchProfiles();
+      } else {
+        fetchProjects();
+      }
     }
-  }, [category]);
+  }, [category, token]);
 
   const fetchProfiles = async () => {
+    if (!token) {
+      console.log('No token available for fetching profiles');
+      Alert.alert('エラー', 'ログインが必要です');
+      return;
+    }
+
+    // トークンからBearerプレフィックスを削除
+    const cleanToken = token.replace('Bearer ', '');
+    console.log('Clean token:', cleanToken);
+
     try {
       setIsLoading(true);
-      const apiResponse = await axios.post(
-        `${API_GATEWAY_URL}/get_profile`,
-        {},
+      console.log('Fetching profiles with token:', token);
+
+      const response = await axios.post(
+        'https://d3iwflz1ce.execute-api.us-west-2.amazonaws.com/v1/get_all_profile',
+        {},  // 空のボディを送信
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
+            'Authorization': cleanToken,
+            'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '') // YYYYMMDDTHHmmssZ形式
+          },
+          timeout: 10000 // 10秒のタイムアウトを設定
         }
       );
-      if(apiResponse.data.error){
-        return
-      }
-      //const { data: { user } } = await supabase.auth.getUser();
-      //if (!user) return;
 
-      /*
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .neq('id', user.id)
-        .order('created_at', { ascending: false });
+      console.log('API Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        data: response.data
+      });
 
-      if (error) {
-        throw error;
+      if (response.data.error) {
+        throw new Error(response.data.error);
       }
-      */
 
-      if (apiResponse.data) {
-        const formattedProfiles: Profile[] = [apiResponse.data].map(profile => ({
-          id: profile.id,
-          name: profile.name,
-          title: profile.title,
-          location: profile.location,
-          email: profile.email,
-          website: profile.website,
-          image_url: profile.image_url,
-          cover_url: profile.cover_url,
-          bio: profile.bio,
-          university: profile.university,
-          github_username: profile.github_username,
-          twitter_username: profile.twitter_username,
-          interests: profile.interests || [],
-          skills: profile.skills || [],
-          created_at: profile.created_at,
-          updated_at: profile.updated_at,
-          age: profile.age,
-          likes: profile.likes || []
-        }));
-        setProfiles(formattedProfiles);
+      // レスポンスデータの型チェック
+      if (!Array.isArray(response.data)) {
+        console.log('Unexpected response format:', response.data);
+        throw new Error('プロフィールデータの形式が不正です');
       }
-    } catch (error) {
-      console.error('Error fetching profiles:', error);
-      Alert.alert('エラー', 'プロフィールの取得に失敗しました。');
+
+      const formattedProfiles = response.data.map(profile => ({
+        id: profile.id || '',
+        username: profile.username || '',
+        age: profile.age || 0,
+        bio: profile.bio || '',
+        location: profile.location || '',
+        email: profile.email || '',
+        icon_url: profile.icon_url || 'https://teamder-aws.s3.us-west-2.amazonaws.com/default-icon.png',
+        cover_url: profile.cover_url || 'https://teamder-aws.s3.us-west-2.amazonaws.com/default-cover.png',
+        interests: Array.isArray(profile.interests) ? profile.interests : [],
+        skills: Array.isArray(profile.skills) ? profile.skills : [],
+        school: profile.school || '',
+        likes: Array.isArray(profile.likes) ? profile.likes : [],
+        githubUsername: profile.githubUsername || '',
+        twitterUsername: profile.twitterUsername || ''
+      }));
+
+      console.log('Formatted profiles:', formattedProfiles);
+      setProfiles(formattedProfiles);
+
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        console.error('Error details:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+          headers: error.response?.headers
+        });
+
+        let errorMessage = 'プロフィールの取得に失敗しました';
+        if (error.response?.status === 401) {
+          errorMessage = '認証エラーが発生しました。再度ログインしてください';
+          router.replace('/(auth)/login');
+        } else if (error.response?.status === 403) {
+          errorMessage = 'アクセスが拒否されました';
+          console.error('Access denied with token:', cleanToken);
+        } else if (error.code === 'ECONNABORTED') {
+          errorMessage = 'タイムアウトが発生しました';
+        }
+
+        Alert.alert('エラー', errorMessage);
+      } else {
+        console.error('Unexpected error:', error);
+        Alert.alert('エラー', '予期せぬエラーが発生しました');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   const fetchProjects = async () => {
+    if (!token) {
+      console.log('No token available for fetching projects');
+      return;
+    }
+
     try {
       setIsLoading(true);
-      /*
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-      */
+      
+      // トークンからBearerプレフィックスを削除
+      const cleanToken = token.replace('Bearer ', '');
 
       const apiResponse = await axios.post(
         `${API_GATEWAY_URL_PRJ}/get_project`,
@@ -192,12 +313,15 @@ export default function DiscoverScreen() {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Authorization': cleanToken // Bearerプレフィックスを付けずにトークンを送信
           }
         }
       );
+
+      console.log('Project API Response:', apiResponse.data);
+
       if(apiResponse.data.error){
-        return
+        throw new Error(apiResponse.data.error);
       }
 
       if (apiResponse.data) {
@@ -356,7 +480,7 @@ export default function DiscoverScreen() {
     return (
       <View style={styles.card}>
         <View style={styles.imageContainer}>
-          <Image source={{ uri: profile.image_url }} style={styles.cardImage} />
+          <Image source={{ uri: profile.icon_url }} style={styles.cardImage} />
           <View style={styles.imageOverlay}>
             <Text style={styles.age}>{profile.age}歳</Text>
           </View>
@@ -366,8 +490,8 @@ export default function DiscoverScreen() {
           <View style={styles.cardContent}>
             <View style={styles.cardHeader}>
               <View style={styles.headerLeft}>
-                <Text style={styles.name}>{profile.name}</Text>
-                <Text style={styles.title}>{profile.title}</Text>
+                <Text style={styles.name}>{profile.username}</Text>
+                <Text style={styles.title}>{profile.school}</Text>
               </View>
               <TouchableOpacity
                 style={styles.viewProfileButton}
@@ -383,7 +507,7 @@ export default function DiscoverScreen() {
               </View>
               <View style={styles.infoRow}>
                 <Code2 size={16} color="#6b7280" />
-                <Text style={styles.infoText}>{profile.university}</Text>
+                <Text style={styles.infoText}>{profile.school}</Text>
               </View>
             </View>
 
@@ -392,29 +516,38 @@ export default function DiscoverScreen() {
             </Text>
 
             <View style={styles.skillsContainer}>
-              {profile.skills.map((skill, index) => {
-                let skillData;
-                try {
-                  skillData = typeof skill === 'string' ? JSON.parse(skill) : skill;
-                } catch (e) {
-                  skillData = { name: skill, years: '未設定' };
+              {Array.isArray(profile.skills) && profile.skills.map((skill, index) => {
+                let skillName = '';
+                let skillYears = '未設定';
+
+                // スキルデータの形式に応じた処理
+                if (typeof skill === 'string') {
+                  skillName = skill;
+                } else if (typeof skill === 'object' && skill !== null) {
+                  skillName = skill.name || '';
+                  skillYears = skill.years || '未設定';
                 }
-                return (
+
+                return skillName ? (
                   <View key={index} style={styles.skillBadge}>
-                    <Text style={styles.skillText}>{skillData.name}</Text>
-                    <Text style={styles.skillYearsText}>{skillData.years}</Text>
+                    <Text style={styles.skillText}>{skillName}</Text>
+                    {skillYears !== '未設定' && (
+                      <Text style={styles.skillYearsText}>{skillYears}</Text>
+                    )}
                   </View>
-                );
+                ) : null;
               })}
             </View>
 
-            {profile.interests && profile.interests.length > 0 && (
+            {Array.isArray(profile.interests) && profile.interests.length > 0 && (
               <View style={styles.interestsContainer}>
                 <Text style={styles.interestsTitle}>興味のある分野</Text>
                 <View style={styles.interestsList}>
-                  {profile.interests.map((interest, index) => (
+                  {profile.interests.map((interest: string | ApiInterest, index) => (
                     <View key={index} style={styles.interestBadge}>
-                      <Text style={styles.interestText}>{interest}</Text>
+                      <Text style={styles.interestText}>
+                        {typeof interest === 'string' ? interest : interest.name}
+                      </Text>
                     </View>
                   ))}
                 </View>
@@ -673,16 +806,16 @@ export default function DiscoverScreen() {
             setSelectedProfile(null);
           }}
           profileData={{
-            name: selectedProfile.name || '',
-            title: selectedProfile.title || '',
+            name: selectedProfile.username || '',
+            title: '',
             location: selectedProfile.location || '',
             email: selectedProfile.email || '',
-            website: selectedProfile.website || '',
-            image: selectedProfile.image_url || '',
+            website: '',
+            image: selectedProfile.icon_url || '',
             coverUrl: selectedProfile.cover_url || '',
             bio: selectedProfile.bio || '',
-            githubUsername: selectedProfile.github_username || '',
-            twitterUsername: selectedProfile.twitter_username || '',
+            githubUsername: '',
+            twitterUsername: '',
             interests: selectedProfile.interests || [],
             skills: (selectedProfile.skills || []).map(skill => {
               if (typeof skill === 'string') {
@@ -702,7 +835,7 @@ export default function DiscoverScreen() {
               };
             }),
             age: String(selectedProfile.age || ''),
-            university: selectedProfile.university || '',
+            university: selectedProfile.school || '',
             activities: [],
             certifications: []
           }}

@@ -1,103 +1,126 @@
-import { createApiRequest } from './api-client';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export interface ChatMessage {
+const API_GATEWAY_URL = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
+
+export type User = {
   id: string;
-  content: string;
+  username: string;
+  icon_url: string;
+};
+
+export type Match = {
+  id: string;
+  user1: User;
+  user2: User;
+};
+
+export type ChatRoom = {
+  id: string;
+  match: Match;
+  lastMessage?: string;
+  lastMessageTime?: string;
+};
+
+export type ChatMessage = {
+  id: string;
+  room_id: string;
   sender_id: string;
-  receiver_id: string;
-  chat_room_id: string;
+  content: string;
   created_at: string;
-  read_at?: string | null;
-}
+};
 
-export interface ChatRoom {
-  id: string;
-  user1_id: string;
-  user2_id: string;
-  created_at: string;
-  last_message?: string;
-  last_message_at?: string;
-  match: {
-    user2: {
-      name: string;
-      image_url: string;
-      title?: string;
+class ChatService {
+  private async getHeaders() {
+    const token = await AsyncStorage.getItem('userToken');
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
     };
-    project?: {
-      title: string;
-      image_url: string;
-      company?: string;
-    };
-  };
-}
+  }
 
-export const chatService = {
-  // メッセージの取得
-  getMessages: async (roomId: string): Promise<ChatMessage[]> => {
+  async getChatRooms(): Promise<ChatRoom[]> {
     try {
-      const response = await createApiRequest(`/chat/${roomId}/messages`, 'GET');
-      return response.data.messages;
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-      throw error;
-    }
-  },
+      const headers = await this.getHeaders();
+      const response = await axios.post(
+        `${API_GATEWAY_URL}/get_chat_rooms`,
+        {},
+        { headers }
+      );
 
-  // メッセージの送信
-  sendMessage: async (roomId: string, content: string): Promise<void> => {
-    try {
-      await createApiRequest(`/chat/${roomId}/messages`, 'POST', {
-        content: content.trim()
-      });
-    } catch (error) {
-      console.error('Error sending message:', error);
-      throw error;
-    }
-  },
+      if (response.data.error) {
+        throw new Error(response.data.error);
+      }
 
-  // メッセージを既読にする
-  markAsRead: async (roomId: string): Promise<void> => {
-    try {
-      await createApiRequest(`/chat/${roomId}/read`, 'POST');
-    } catch (error) {
-      console.error('Error marking messages as read:', error);
-      throw error;
-    }
-  },
-
-  // チャットルーム一覧の取得
-  getChatRooms: async (): Promise<ChatRoom[]> => {
-    try {
-      const response = await createApiRequest('/chat/rooms', 'GET');
-      return response.data.rooms;
+      return response.data;
     } catch (error) {
       console.error('Error fetching chat rooms:', error);
       throw error;
     }
-  },
+  }
 
-  // チャットルームの取得
-  getChatRoom: async (roomId: string): Promise<ChatRoom> => {
+  async getChatRoom(roomId: string): Promise<ChatRoom> {
     try {
-      const response = await createApiRequest(`/chat/${roomId}`, 'GET');
-      return response.data.room;
+      const headers = await this.getHeaders();
+      const response = await axios.post(
+        `${API_GATEWAY_URL}/get_chat_room`,
+        { room_id: roomId },
+        { headers }
+      );
+
+      if (response.data.error) {
+        throw new Error(response.data.error);
+      }
+
+      return response.data;
     } catch (error) {
       console.error('Error fetching chat room:', error);
       throw error;
     }
-  },
+  }
 
-  // チャットルームの作成
-  createChatRoom: async (userId: string, projectId?: string): Promise<ChatRoom> => {
+  async getMessages(roomId: string): Promise<ChatMessage[]> {
     try {
-      const response = await createApiRequest('/chat/rooms', 'POST', {
-        user_id: userId,
-        project_id: projectId
-      });
-      return response.data.room;
+      const headers = await this.getHeaders();
+      const response = await axios.post(
+        `${API_GATEWAY_URL}/get_messages`,
+        { room_id: roomId },
+        { headers }
+      );
+
+      if (response.data.error) {
+        throw new Error(response.data.error);
+      }
+
+      return response.data;
     } catch (error) {
-      console.error('Error creating chat room:', error);
+      console.error('Error fetching messages:', error);
       throw error;
     }
   }
-};
+
+  async sendMessage(roomId: string, content: string): Promise<ChatMessage> {
+    try {
+      const headers = await this.getHeaders();
+      const response = await axios.post(
+        `${API_GATEWAY_URL}/send_message`,
+        {
+          room_id: roomId,
+          content: content.trim()
+        },
+        { headers }
+      );
+
+      if (response.data.error) {
+        throw new Error(response.data.error);
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error('Error sending message:', error);
+      throw error;
+    }
+  }
+}
+
+export const chatService = new ChatService();

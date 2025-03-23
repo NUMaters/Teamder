@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Mail, Lock, ArrowRight } from 'lucide-react-native';
 import axios from 'axios';
 import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 環境変数の型定義
 const AWS_REGION = process.env.EXPO_PUBLIC_AWS_REGION;
@@ -29,11 +30,8 @@ export default function RegisterScreen() {
 
   const saveToken = async (id_token: string) => {
     try {
-      const fileUri = `${FileSystem.documentDirectory}token.txt`;
-      await FileSystem.writeAsStringAsync(fileUri, id_token, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
-      console.log("トークンを保存しました:", fileUri);
+      await AsyncStorage.setItem('userToken', id_token);
+      console.log("トークンを保存しました");
     } catch (error) {
       console.error("トークンの保存に失敗しました:", error);
       throw new Error('トークンの保存に失敗しました');
@@ -111,10 +109,7 @@ export default function RegisterScreen() {
       if (result.id_token) {
         await saveToken(result.id_token);
         // トークンを保持したままプロフィール設定画面に遷移
-        router.push({
-          pathname: '/(auth)/setup',
-          params: { token: result.id_token }
-        });
+        router.replace('/(auth)/setup');
       }
     } catch (error) {
       setError('予期せぬエラーが発生しました。もう一度お試しください。');

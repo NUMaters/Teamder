@@ -2,10 +2,72 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { LogOut } from 'lucide-react-native';
-import { createApiRequest, removeToken } from '@/lib/api-client';
-import { Profile } from '@/types/profile';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import ProfileContent from '@/components/ProfileContent';
 import EditProfileModal from '@/components/EditProfileModal';
+
+const API_GATEWAY_URL = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
+
+// 興味のある分野の英語から日本語への変換マップ
+const interestTranslations: { [key: string]: string } = {
+  'web_development': 'Web開発',
+  'mobile_development': 'モバイル開発',
+  'game_development': 'ゲーム開発',
+  'machine_learning': '機械学習',
+  'artificial_intelligence': 'AI',
+  'data_science': 'データサイエンス',
+  'cloud_computing': 'クラウドコンピューティング',
+  'cybersecurity': 'サイバーセキュリティ',
+  'blockchain': 'ブロックチェーン',
+  'devops': 'DevOps',
+  'iot': 'IoT',
+  'ar_vr': 'AR/VR',
+  'ui_ux': 'UI/UXデザイン',
+  'frontend': 'フロントエンド',
+  'backend': 'バックエンド',
+  'fullstack': 'フルスタック',
+  'database': 'データベース',
+  'networking': 'ネットワーク',
+  'testing': 'テスト',
+  'project_management': 'プロジェクトマネジメント'
+};
+
+// 英語の興味を日本語に変換する関数
+const translateInterest = (interest: string): string => {
+  return interestTranslations[interest] || interest;
+};
+
+interface Skill {
+  name: string;
+  years: string;
+}
+
+interface Activity {
+  id: string;
+  title: string;
+  period: string;
+  description: string;
+  link?: string;
+}
+
+interface Profile {
+  username: string;
+  title?: string;
+  location?: string;
+  email: string;
+  website?: string;
+  icon_url?: string;
+  cover_url?: string;
+  bio?: string;
+  githubUsername?: string;
+  twitterUsername?: string;
+  interests: string[];
+  skills: Skill[];
+  age?: number;
+  school?: string;
+  activities: Activity[];
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -13,37 +75,70 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
-
   const fetchProfile = async () => {
     try {
-      const response = await createApiRequest('/profile', 'GET');
-      if (response.data) {
-        setProfile(response.data);
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        console.log('No token found, redirecting to login');
+        router.replace('/(auth)/login');
+        return;
       }
+
+      console.log('Fetching profile with token:', token);
+      const response = await axios.post(
+        `${API_GATEWAY_URL}/get_profile`,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token,
+            'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+          }
+        }
+      );
+
+      console.log('Profile API Response:', response.data);
+
+      if (response.data.error) {
+        throw new Error(response.data.error);
+      }
+
+      setProfile(response.data);
     } catch (error) {
       console.error('Error fetching profile:', error);
-      Alert.alert('エラー', 'プロフィールの取得に失敗しました。');
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 403) {
+          Alert.alert('エラー', '認証エラーが発生しました。再度ログインしてください。');
+          await AsyncStorage.removeItem('userToken');
+          router.replace('/(auth)/login');
+        } else {
+          Alert.alert('エラー', 'プロフィールの取得に失敗しました。');
+        }
+      } else {
+        Alert.alert('エラー', 'プロフィールの取得に失敗しました。');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleProfileUpdate = () => {
-    fetchProfile(); // プロフィールを再取得
+    fetchProfile();
   };
 
   const handleSignOut = async () => {
     try {
-      await removeToken();
+      await AsyncStorage.removeItem('userToken');
       router.replace('/(auth)/login');
     } catch (error) {
       console.error('Error signing out:', error);
       Alert.alert('エラー', 'ログアウトに失敗しました。');
     }
   };
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
 
   if (loading) {
     return (
@@ -78,29 +173,26 @@ export default function ProfileScreen() {
                 location: profile.location || '',
                 email: profile.email || '',
                 website: profile.website || '',
-                image: profile.image || '',
-                coverUrl: profile.coverUrl || '',
+                image: profile.icon_url || '',
+                coverUrl: profile.cover_url || '',
                 bio: profile.bio || '',
                 githubUsername: profile.githubUsername || '',
                 twitterUsername: profile.twitterUsername || '',
-                interests: profile.interests || [],
-                skills: profile.skills?.map(skill => ({
-                  name: skill.name,
-                  years: skill.years
-                })) || [],
+                interests: (profile.interests || []).map(translateInterest),
+                skills: Array.isArray(profile.skills) 
+                  ? profile.skills.map(skill => ({
+                      name: typeof skill === 'string' ? skill : skill.name || '',
+                      years: typeof skill === 'string' ? '未設定' : skill.years || '未設定'
+                    }))
+                  : [],
                 age: profile.age?.toString() || '',
-                university: profile.university || '',
+                university: profile.school || '',
                 activities: profile.activities || [],
                 certifications: []
               }}
               isOwnProfile={true}
               onEditPress={() => setIsEditModalVisible(true)}
             />
-            <Link href="/profile/edit" asChild>
-              <TouchableOpacity style={styles.button}>
-                <Text style={styles.buttonText}>プロフィール編集</Text>
-              </TouchableOpacity>
-            </Link>
           </>
         ) : (
           <Text>プロフィールが見つかりません</Text>
@@ -114,14 +206,19 @@ export default function ProfileScreen() {
         initialData={{
           name: profile?.username || '',
           title: profile?.title || '',
-          university: profile?.university || '',
+          university: profile?.school || '',
           location: profile?.location || '',
           githubUsername: profile?.githubUsername || '',
           twitterUsername: profile?.twitterUsername || '',
           bio: profile?.bio || '',
-          imageUrl: profile?.image || '',
-          coverUrl: profile?.coverUrl || '',
-          skills: profile?.skills || [],
+          imageUrl: profile?.icon_url || '',
+          coverUrl: profile?.cover_url || '',
+          skills: Array.isArray(profile?.skills)
+            ? profile.skills.map(skill => ({
+                name: typeof skill === 'string' ? skill : skill.name || '',
+                years: typeof skill === 'string' ? '未設定' : skill.years || '未設定'
+              }))
+            : [],
           interests: profile?.interests || [],
           age: profile?.age?.toString() || '',
           activities: profile?.activities || []
@@ -180,8 +277,5 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  signOutButton: {
-    backgroundColor: '#FF3B30',
   },
 });

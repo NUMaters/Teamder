@@ -3,6 +3,8 @@ import { Modal, View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, 
 import { X, Plus, ChevronDown, Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { createApiRequest, DEFAULT_ICON_URL, DEFAULT_COVER_URL } from '@/lib/api-client';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type ImageType = {
   uri: string;
@@ -65,6 +67,8 @@ const EXPERIENCE_YEARS = [
   '1年未満', '1-2年', '2-3年', '3-5年', '5-7年', '7-10年', '10年以上'
 ];
 
+const API_GATEWAY_URL = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
+
 export default function EditProfileModal({ isVisible, onClose, onUpdate, initialData }: EditProfileModalProps) {
   const [formData, setFormData] = useState<ProfileFormData>({
     ...initialData,
@@ -82,7 +86,6 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
 
   const handleImagePick = async (type: 'profile' | 'cover') => {
     try {
-      // Request permissions first
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (status !== 'granted') {
@@ -107,15 +110,22 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 1,
+        quality: 0.8,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const file = result.assets[0];
         const fileExt = file.uri.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
+        const fileName = `${Date.now()}.${fileExt}`;
 
-        // Create form data for image upload
+        // トークンを取得
+        const token = await AsyncStorage.getItem('userToken');
+        if (!token) {
+          Alert.alert('エラー', '認証情報が見つかりません。再度ログインしてください。');
+          return;
+        }
+
+        // FormDataを作成
         const formData = new FormData();
         formData.append('file', {
           uri: file.uri,
@@ -123,28 +133,59 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
           name: fileName,
         } as any);
 
-        // Upload image
-        const uploadResponse = await createApiRequest(
-          type === 'profile' ? '/upload/profile-image' : '/upload/cover-image',
-          'POST',
-          formData
+        console.log('Uploading image:', {
+          uri: file.uri,
+          type: `image/${fileExt}`,
+          name: fileName,
+        });
+
+        // 画像をアップロード
+        const response = await axios.post(
+          `${API_GATEWAY_URL}${type === 'profile' ? '/upload/profile-image' : '/upload/cover-image'}`,
+          formData,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'Authorization': `Bearer ${token}`,
+              'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+            },
+            timeout: 10000, // 10秒のタイムアウトを設定
+          }
         );
 
-        if (!uploadResponse.data?.url) {
-          throw new Error('画像のアップロードに失敗しました');
-        }
+        console.log('Upload response:', response.data);
 
-        setImages(prev => ({
-          ...prev,
-          [type === 'profile' ? 'icon' : 'cover']: { uri: uploadResponse.data.url }
-        }));
+        if (response.data?.url) {
+          setImages(prev => ({
+            ...prev,
+            [type === 'profile' ? 'icon' : 'cover']: { uri: response.data.url }
+          }));
+
+          // フォームデータも更新
+          setFormData(prev => ({
+            ...prev,
+            [type === 'profile' ? 'imageUrl' : 'coverUrl']: response.data.url
+          }));
+        } else {
+          throw new Error('画像URLが返されませんでした');
+        }
       }
     } catch (error) {
-      console.error('Image picker error:', error);
-      Alert.alert(
-        'エラー',
-        '画像の選択中にエラーが発生しました。もう一度お試しください。'
-      );
+      console.error('Image upload error:', error);
+      
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED') {
+          Alert.alert('エラー', 'アップロードがタイムアウトしました。ネットワーク接続を確認して、もう一度お試しください。');
+        } else if (error.response?.status === 413) {
+          Alert.alert('エラー', '画像サイズが大きすぎます。より小さい画像を選択してください。');
+        } else if (error.response?.status === 403) {
+          Alert.alert('エラー', '認証エラーが発生しました。再度ログインしてください。');
+        } else {
+          Alert.alert('エラー', '画像のアップロードに失敗しました。ネットワーク接続を確認して、もう一度お試しください。');
+        }
+      } else {
+        Alert.alert('エラー', '画像の選択中にエラーが発生しました。もう一度お試しください。');
+      }
     }
   };
 
@@ -163,12 +204,23 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
   };
 
   const addSkillWithExperience = (skill: string, years: string) => {
-    setFormData(prev => ({
-      ...prev,
-      skills: prev.skills.some(s => s.name === skill)
-        ? prev.skills.map(s => s.name === skill ? { name: skill, years } : s)
-        : [...prev.skills, { name: skill, years }]
-    }));
+    setFormData(prev => {
+      // 既存のスキルを確認
+      const existingSkillIndex = prev.skills.findIndex(s => s.name === skill);
+      
+      if (existingSkillIndex !== -1) {
+        // 既存のスキルを更新
+        const updatedSkills = [...prev.skills];
+        updatedSkills[existingSkillIndex] = { name: skill, years };
+        return { ...prev, skills: updatedSkills };
+      } else {
+        // 新しいスキルを追加
+        return {
+          ...prev,
+          skills: [...prev.skills, { name: skill, years }]
+        };
+      }
+    });
     setSelectedSkill(null);
     setShowExperiencePicker(false);
   };
@@ -211,31 +263,56 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
 
   const handleSubmit = async () => {
     try {
-      const response = await createApiRequest('/user/profile', 'PUT', {
-        name: formData.name,
-        title: formData.title,
-        university: formData.university,
-        location: formData.location,
-        github_username: formData.githubUsername,
-        twitter_username: formData.twitterUsername,
-        bio: formData.bio,
-        image_url: images.icon.uri,
-        cover_url: images.cover.uri,
-        skills: formData.skills,
-        interests: formData.interests,
-        age: formData.age,
-        activities: formData.activities,
-      });
-
-      if (!response.data) {
-        throw new Error('プロフィールの更新に失敗しました');
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        Alert.alert('エラー', '認証情報が見つかりません。再度ログインしてください。');
+        return;
       }
 
-      onClose();
+      // スキルデータを整形
+      const formattedData = {
+        ...formData,
+        skills: formData.skills.map(skill => ({
+          name: skill.name,
+          years: skill.years
+        }))
+      };
+
+      console.log('Updating profile with token:', token);
+      console.log('Profile update data:', formattedData);
+
+      const response = await axios.post(
+        `${API_GATEWAY_URL}/set_profile`,
+        formattedData,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token,
+            'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+          }
+        }
+      );
+
+      console.log('Profile update response:', response.data);
+
+      if (response.data.error) {
+        throw new Error(response.data.error);
+      }
+
+      Alert.alert('成功', 'プロフィールを更新しました');
       onUpdate();
+      onClose();
     } catch (error) {
-      console.error('プロフィール更新エラー:', error);
-      Alert.alert('エラー', 'プロフィールの更新に失敗しました');
+      console.error('Error updating profile:', error);
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 403) {
+          Alert.alert('エラー', '認証エラーが発生しました。再度ログインしてください。');
+        } else {
+          Alert.alert('エラー', 'プロフィールの更新に失敗しました。');
+        }
+      } else {
+        Alert.alert('エラー', 'プロフィールの更新に失敗しました。');
+      }
     }
   };
 
