@@ -195,6 +195,12 @@ export default function DiscoverScreen() {
           return;
         }
 
+        // 新規登録の場合、userIdがまだ存在しない。
+        // ここで初回のみ、デフォルトのIDをセットしておく（一時的なもの）
+        // これにより、プロファイル取得に失敗してもアプリを継続して使用できる
+        await AsyncStorage.setItem('userId', 'temp-user-id');
+        console.log('Set temporary user ID');
+
         // プロファイル情報を取得してuserIdを保存
         console.log('Fetching profile to get userId...');
         try {
@@ -218,7 +224,7 @@ export default function DiscoverScreen() {
             await AsyncStorage.setItem('userId', response.data.id);
           } else {
             console.error('Failed to get user ID from profile - no ID in response');
-            // IDがなくてもエラーにしない
+            // IDがなくてもエラーにしない - 一時IDを使用
           }
         } catch (profileError) {
           console.error('Error fetching profile:', profileError);
@@ -232,12 +238,19 @@ export default function DiscoverScreen() {
               headers: profileError.config?.headers
             });
             
-            // 認証エラーの場合はトークンをクリアしてログイン画面へ
-            if (profileError.response?.status === 403 || profileError.response?.status === 401) {
+            // 認証エラーの場合はログアウト
+            if (profileError.response?.status === 401) {
               console.log('Authentication error, redirecting to login');
               await AsyncStorage.removeItem('userToken');
               await AsyncStorage.removeItem('userId');
               router.replace('/(auth)/login');
+              return;
+            }
+            
+            // 403エラーは新規ユーザーの場合によく発生する - ログインは維持
+            if (profileError.response?.status === 403) {
+              console.log('Permission error (403) - likely a new user. Continuing...');
+              // 一時IDを使用して続行
               return;
             }
           }

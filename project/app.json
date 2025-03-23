@@ -31,6 +31,20 @@
     "plugins": [
       "expo-router"
     ],
-    "scheme": "teamder"
+    "scheme": "teamder",
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "0dc41c87-8a77-4bc7-9af5-5b37844aca36"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0dc41c87-8a77-4bc7-9af5-5b37844aca36"
+    }
   }
 }
