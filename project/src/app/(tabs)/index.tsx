@@ -313,6 +313,10 @@ export default function DiscoverScreen() {
       // トークンからBearerプレフィックスを削除
       const cleanToken = token.replace('Bearer ', '');
 
+      // 現在のユーザーIDを取得
+      const currentUserId = await AsyncStorage.getItem('userId');
+      console.log('Current user ID:', currentUserId);
+
       const apiResponse = await axios.post(
         `${API_GATEWAY_URL_PRJ}/get_all_project`,
         {},
@@ -333,22 +337,24 @@ export default function DiscoverScreen() {
       }
 
       if (Array.isArray(apiResponse.data)) {
-        const formattedProjects: Project[] = apiResponse.data.map(project => ({
-          id: project.id || '',
-          owner_id: project.owner_id || '',
-          title: project.title || '',
-          university: project.university || '',
-          image_url: project.image_url || 'https://teamder-aws.s3.us-west-2.amazonaws.com/project-placeholder.png',
-          location: project.location || '',
-          description: project.description || '',
-          team_size: project.team_size || '',
-          duration: project.duration || '',
-          budget: project.budget || '',
-          status: project.status || '募集中',
-          created_at: project.created_at || '',
-          updated_at: project.updated_at || '',
-          likes: Array.isArray(project.likes) ? project.likes : []
-        }));
+        const formattedProjects: Project[] = apiResponse.data
+          .filter(project => project.owner_id !== currentUserId) // 自分のプロジェクトを除外
+          .map(project => ({
+            id: project.id || '',
+            owner_id: project.owner_id || '',
+            title: project.title || '',
+            university: project.university || '',
+            image_url: project.image_url || 'https://teamder-aws.s3.us-west-2.amazonaws.com/project-placeholder.png',
+            location: project.location || '',
+            description: project.description || '',
+            team_size: project.team_size || '',
+            duration: project.duration || '',
+            budget: project.budget || '',
+            status: project.status || '募集中',
+            created_at: project.created_at || '',
+            updated_at: project.updated_at || '',
+            likes: Array.isArray(project.likes) ? project.likes : []
+          }));
         setProjects(formattedProjects);
       } else {
         console.error('Unexpected project data format:', apiResponse.data);

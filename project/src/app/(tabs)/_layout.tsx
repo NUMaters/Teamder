@@ -41,6 +41,18 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="create-np"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="projects"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

@@ -61,7 +61,12 @@ export default function ManageProjectsScreen() {
       console.log('Fetched projects:', projectsResponse.data);
       console.log('Projects count:', projectsResponse.data.length);
 
-      setProjects(projectsResponse.data);
+      const myProjects = projectsResponse.data.filter(
+        (project: Project) => project.owner_id === userResponse.data.id
+      );
+
+      console.log('My projects:', myProjects);
+      setProjects(myProjects);
     } catch (error) {
       console.error('Error fetching projects:', error);
       Alert.alert('エラー', 'プロジェクトの取得に失敗しました');
