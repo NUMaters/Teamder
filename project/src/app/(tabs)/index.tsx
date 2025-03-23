@@ -11,8 +11,8 @@ import CreateProjectModal from '@/components/CreateProjectModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
-const API_GATEWAY_URL = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
-const API_GATEWAY_URL_PRJ = process.env.EXPO_PUBLIC_API_GATEWAY_URL_PROJECT
+const API_GATEWAY_URL = 'https://ausyu39guk.execute-api.us-west-2.amazonaws.com/v1';
+const API_GATEWAY_URL_PROJECT = 'https://62t4hcoegf.execute-api.us-west-2.amazonaws.com/v1';
 
 type Category = 'engineers' | 'projects';
 
@@ -173,14 +173,76 @@ export default function DiscoverScreen() {
   useEffect(() => {
     const initializeToken = async () => {
       try {
+        console.log('Initializing token...');
         const storedToken = await AsyncStorage.getItem('userToken');
+        console.log('Token from storage:', storedToken ? 'Found token' : 'No token');
+        
         if (!storedToken) {
           console.log('No token found in index');
           router.replace('/(auth)/login');
           return;
         }
-        console.log('Token initialized in index:', storedToken);
+        
+        console.log('Token initialized in index');
         setToken(storedToken);
+
+        // まず既存のuserIdがあるか確認
+        const existingUserId = await AsyncStorage.getItem('userId');
+        console.log('Existing userId check:', existingUserId || 'None found');
+        
+        if (existingUserId) {
+          console.log('Using existing user ID:', existingUserId);
+          return;
+        }
+
+        // プロファイル情報を取得してuserIdを保存
+        console.log('Fetching profile to get userId...');
+        try {
+          const response = await axios.post(
+            `${API_GATEWAY_URL}/get_profile`,
+            {},
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': storedToken,
+                'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+              }
+            }
+          );
+
+          console.log('Profile fetch response status:', response.status);
+          console.log('Profile data preview:', response.data ? 'Data received' : 'No data');
+
+          if (response.data && response.data.id) {
+            console.log('User ID retrieved:', response.data.id);
+            await AsyncStorage.setItem('userId', response.data.id);
+          } else {
+            console.error('Failed to get user ID from profile - no ID in response');
+            // IDがなくてもエラーにしない
+          }
+        } catch (profileError) {
+          console.error('Error fetching profile:', profileError);
+          
+          // エラーメッセージを詳細に出力
+          if (axios.isAxiosError(profileError)) {
+            console.error('Profile fetch error details:', {
+              status: profileError.response?.status,
+              statusText: profileError.response?.statusText,
+              data: profileError.response?.data,
+              headers: profileError.config?.headers
+            });
+            
+            // 認証エラーの場合はトークンをクリアしてログイン画面へ
+            if (profileError.response?.status === 403 || profileError.response?.status === 401) {
+              console.log('Authentication error, redirecting to login');
+              await AsyncStorage.removeItem('userToken');
+              await AsyncStorage.removeItem('userId');
+              router.replace('/(auth)/login');
+              return;
+            }
+          }
+          // その他のエラーはログインは維持
+        }
       } catch (error) {
         console.error('Error initializing token:', error);
         router.replace('/(auth)/login');
@@ -188,6 +250,19 @@ export default function DiscoverScreen() {
     };
 
     initializeToken();
+  }, []);
+
+  useEffect(() => {
+    // アプリがフォアグラウンドに戻った時に実行されるリスナー
+    const unsubscribe = () => {
+      console.log('App state listener registered');
+      // この関数は後でリスナーを解除するために使う
+      return () => {
+        console.log('App state listener unsubscribed');
+      };
+    };
+    
+    return unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -208,10 +283,6 @@ export default function DiscoverScreen() {
       return;
     }
 
-    // トークンからBearerプレフィックスを削除
-    const cleanToken = token.replace('Bearer ', '');
-    console.log('Clean token:', cleanToken);
-
     try {
       setIsLoading(true);
       console.log('Fetching profiles with token:', token);
@@ -226,7 +297,7 @@ export default function DiscoverScreen() {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': cleanToken,
+            'Authorization': token,  // 完全なトークン（Bearer含む）を使用
             'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '') // YYYYMMDDTHHmmssZ形式
           },
           timeout: 10000 // 10秒のタイムアウトを設定
@@ -287,7 +358,7 @@ export default function DiscoverScreen() {
           router.replace('/(auth)/login');
         } else if (error.response?.status === 403) {
           errorMessage = 'アクセスが拒否されました';
-          console.error('Access denied with token:', cleanToken);
+          console.error('Access denied with token:', token);
         } else if (error.code === 'ECONNABORTED') {
           errorMessage = 'タイムアウトが発生しました';
         }
@@ -311,20 +382,17 @@ export default function DiscoverScreen() {
     try {
       setIsLoading(true);
       
-      // トークンからBearerプレフィックスを削除
-      const cleanToken = token.replace('Bearer ', '');
-
       // 現在のユーザーIDを取得
       const currentUserId = await AsyncStorage.getItem('userId');
-      console.log('Current user ID:', currentUserId);
-
+      console.log('Current user ID for projects:', currentUserId);
+      
       const apiResponse = await axios.post(
-        `${API_GATEWAY_URL_PRJ}/get_all_project`,
+        `${API_GATEWAY_URL_PROJECT}/get_all_project`,
         {},
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': cleanToken,
+            'Authorization': token,  // 完全なトークン（Bearer含む）を使用
             'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
           },
           timeout: 10000
@@ -401,14 +469,135 @@ export default function DiscoverScreen() {
     };
   });
 
-  const handleSwipeFeedback = (direction: 'left' | 'right') => {
+  const handleSwipeFeedback = async (direction: 'left' | 'right', cardIndex: number) => {
     swipeDirection.value = direction;
     bgOpacity.value = withSpring(0.6, { damping: 12 });
     
-    setTimeout(() => {
-      bgOpacity.value = withTiming(0, { duration: 300 });
-      swipeDirection.value = null;
-    }, 300);
+    try {
+      const action = direction === 'right' ? 'like' : 'skip';
+      const currentCard = category === 'engineers' ? profiles[cardIndex] : projects[cardIndex];
+      
+      if (!currentCard) {
+        console.error('Card not found');
+        return;
+      }
+
+      const userId = await AsyncStorage.getItem('userId');
+      if (!userId) {
+        console.error('User ID not found');
+        Alert.alert('エラー', 'ユーザー情報が取得できません。再度ログインしてください。');
+        await AsyncStorage.removeItem('userToken');
+        router.replace('/(auth)/login');
+        return;
+      }
+
+      console.log(`Processing ${action} action for ${category}, user ID: ${userId}`);
+
+      if (category === 'engineers') {
+        // エンジニアへのスワイプ処理
+        console.log(`Swiping ${action} on engineer with ID: ${currentCard.id}`);
+        const response = await axios.post(
+          `${API_GATEWAY_URL}/swipe`,
+          {
+            swiper_id: userId,
+            swiped_id: currentCard.id,
+            action: action
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': token,
+              'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+            }
+          }
+        );
+
+        console.log('Swipe response:', response.data);
+
+        if (response.data.match) {
+          Alert.alert(
+            'マッチしました！',
+            `${(currentCard as Profile).username}さんとマッチしました！`,
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // マッチ後の処理（チャットルームへの遷移など）
+                  router.push('/chat');
+                }
+              }
+            ]
+          );
+        }
+      } else {
+        // プロジェクトへのスワイプ処理
+        console.log(`Swiping ${action} on project with ID: ${currentCard.id}`);
+        const response = await axios.post(
+          `${API_GATEWAY_URL_PROJECT}/projects/${currentCard.id}/like`,
+          {
+            user_id: userId,
+            action: action
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': token,
+              'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+            }
+          }
+        );
+
+        console.log('Project like response:', response.data);
+
+        if (response.data.success) {
+          Alert.alert(
+            '応募完了',
+            'プロジェクトに応募しました。オーナーからの返信をお待ちください。',
+            [{ text: 'OK' }]
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Swipe error:', error);
+      
+      // エラー詳細を出力
+      if (axios.isAxiosError(error)) {
+        console.error('Swipe error details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          headers: error.config?.headers
+        });
+        
+        // 認証エラーの場合
+        if (error.response?.status === 403 || error.response?.status === 401) {
+          Alert.alert(
+            '認証エラー',
+            'セッションが切れました。再度ログインしてください。',
+            [{ 
+              text: 'OK', 
+              onPress: async () => {
+                await AsyncStorage.removeItem('userToken');
+                await AsyncStorage.removeItem('userId');
+                router.replace('/(auth)/login');
+              } 
+            }]
+          );
+          return;
+        }
+      }
+      
+      Alert.alert(
+        'エラー',
+        'スワイプ処理中にエラーが発生しました。',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setTimeout(() => {
+        bgOpacity.value = withTiming(0, { duration: 300 });
+        swipeDirection.value = null;
+      }, 300);
+    }
   };
 
   const handleSwiping = (x: number, y: number) => {
@@ -709,11 +898,11 @@ export default function DiscoverScreen() {
           onSwiping={handleSwiping}
           onSwipedLeft={(cardIndex) => {
             console.log(`Swiped SKIP on card: ${cardIndex}`);
-            handleSwipeFeedback('left');
+            handleSwipeFeedback('left', cardIndex);
           }}
           onSwipedRight={(cardIndex) => {
             console.log(`Swiped LIKE on card: ${cardIndex}`);
-            handleSwipeFeedback('right');
+            handleSwipeFeedback('right', cardIndex);
           }}
           cardIndex={0}
           backgroundColor={'transparent'}

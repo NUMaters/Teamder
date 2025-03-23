@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Mail, Lock, ArrowRight } from 'lucide-react-native';
 import axios from 'axios';
 import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 環境変数の型定義
 const AWS_REGION = process.env.EXPO_PUBLIC_AWS_REGION;
@@ -28,13 +29,50 @@ export default function LoginScreen() {
 
   const saveToken = async (id_token: string) => {
     try {
+      // AsyncStorageにトークンを保存
+      console.log('Saving token to AsyncStorage...');
+      await AsyncStorage.setItem('userToken', `Bearer ${id_token}`);
+      await AsyncStorage.setItem('userEmail', email);
+      console.log('Token successfully saved to AsyncStorage');
+      
+      // ファイルシステムにもバックアップとして保存
       const fileUri = `${FileSystem.documentDirectory}token.txt`;
       await FileSystem.writeAsStringAsync(fileUri, id_token, {
         encoding: FileSystem.EncodingType.UTF8,
       });
-      console.log("トークンを保存しました:", fileUri);
+      console.log("Token backed up to file:", fileUri);
+      
+      // トークンを使ってプロファイル情報を取得
+      try {
+        console.log('Fetching user profile after login...');
+        const response = await axios.post(
+          `${API_GATEWAY_URL}/get_profile`,
+          {},
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${id_token}`,
+              'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+            }
+          }
+        );
+        
+        if (response.data && response.data.id) {
+          console.log('User ID retrieved after login:', response.data.id);
+          await AsyncStorage.setItem('userId', response.data.id);
+          return true;
+        } else {
+          console.error('No user ID in profile response');
+          // IDがなくても続行
+          return true;
+        }
+      } catch (profileError) {
+        console.error('Error fetching profile after login:', profileError);
+        // プロファイル取得エラーでも続行
+        return true;
+      }
     } catch (error) {
-      console.error("トークンの保存に失敗しました:", error);
+      console.error("Error saving token:", error);
       throw new Error('トークンの保存に失敗しました');
     }
   };
@@ -103,16 +141,21 @@ export default function LoginScreen() {
       setLoading(true);
       setError(null);
 
-      const { error: loginError, id_token: idToken } = await login(email, password);
+      const { error: loginError, id_token: id_Token } = await login(email, password);
       
       if (loginError) {
         throw loginError;
       }
 
-      if (idToken) {
+      if (id_Token) {
         // トークンを保存
-        await saveToken(idToken);
-        router.replace(`/(tabs)`);
+        await saveToken(id_Token);
+        
+        // 意図的に遅延を入れる
+        console.log('Login successful, navigating to main screen...');
+        setTimeout(() => {
+          router.replace('/(tabs)');
+        }, 1000);
       }
     } catch (error) {
       console.error('Login error:', error);
