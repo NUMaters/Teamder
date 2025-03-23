@@ -215,10 +215,9 @@ export default function DiscoverScreen() {
       setIsLoading(true);
       console.log('Fetching profiles with token:', token);
 
-      // 現在のユーザーのIDを取得
-      const currentUserId = await AsyncStorage.getItem('userId');
-      console.log('Current user ID:', currentUserId);
-      console.log('Current user ID type:', typeof currentUserId);
+      // 現在のユーザーのメールアドレスを取得
+      const currentUserEmail = await AsyncStorage.getItem('userEmail');
+      console.log('Current user email:', currentUserEmail);
 
       const response = await axios.post(
         'https://d3iwflz1ce.execute-api.us-west-2.amazonaws.com/v1/get_all_profile',
@@ -267,21 +266,8 @@ export default function DiscoverScreen() {
         twitterUsername: profile.twitterUsername || ''
       }));
 
-      console.log('All profiles before filtering:', formattedProfiles);
-      console.log('Profile IDs:', formattedProfiles.map(p => ({ id: p.id, type: typeof p.id })));
-
       // 自分のプロフィールを除外
-      const filteredProfiles = formattedProfiles.filter(profile => {
-        console.log('Comparing:', {
-          profileId: profile.id,
-          profileIdType: typeof profile.id,
-          currentUserId: currentUserId,
-          currentUserIdType: typeof currentUserId,
-          isMatch: profile.id === currentUserId
-        });
-        return profile.id !== currentUserId;
-      });
-
+      const filteredProfiles = formattedProfiles.filter(profile => profile.email !== currentUserEmail);
       console.log('Filtered profiles:', filteredProfiles);
       setProfiles(filteredProfiles);
 
@@ -327,11 +313,6 @@ export default function DiscoverScreen() {
       // トークンからBearerプレフィックスを削除
       const cleanToken = token.replace('Bearer ', '');
 
-      // 現在のユーザーのIDを取得
-      const currentUserId = await AsyncStorage.getItem('userId');
-      console.log('Current user ID:', currentUserId);
-      console.log('Current user ID type:', typeof currentUserId);
-
       const apiResponse = await axios.post(
         `${API_GATEWAY_URL_PRJ}/get_all_project`,
         {},
@@ -357,7 +338,7 @@ export default function DiscoverScreen() {
           owner_id: project.owner_id || '',
           title: project.title || '',
           university: project.university || '',
-          image_url: project.image_url || 'https://teamder-aws.s3.us-west-2.amazonaws.com/default-project.png',
+          image_url: project.image_url || 'https://teamder-aws.s3.us-west-2.amazonaws.com/project-placeholder.png',
           location: project.location || '',
           description: project.description || '',
           team_size: project.team_size || '',
@@ -368,24 +349,7 @@ export default function DiscoverScreen() {
           updated_at: project.updated_at || '',
           likes: Array.isArray(project.likes) ? project.likes : []
         }));
-
-        console.log('All projects before filtering:', formattedProjects);
-        console.log('Project owner IDs:', formattedProjects.map(p => ({ owner_id: p.owner_id, type: typeof p.owner_id })));
-
-        // 自分のプロジェクトを除外
-        const filteredProjects = formattedProjects.filter(project => {
-          console.log('Comparing project:', {
-            ownerId: project.owner_id,
-            ownerIdType: typeof project.owner_id,
-            currentUserId: currentUserId,
-            currentUserIdType: typeof currentUserId,
-            isMatch: project.owner_id === currentUserId
-          });
-          return project.owner_id !== currentUserId;
-        });
-
-        console.log('Filtered projects:', filteredProjects);
-        setProjects(filteredProjects);
+        setProjects(formattedProjects);
       } else {
         console.error('Unexpected project data format:', apiResponse.data);
         throw new Error('プロジェクトデータの形式が不正です');

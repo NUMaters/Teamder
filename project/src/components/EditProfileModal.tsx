@@ -117,6 +117,7 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
         const file = result.assets[0];
         const fileExt = file.uri.split('.').pop()?.toLowerCase() || 'jpg';
         const fileName = `${Date.now()}.${fileExt}`;
+        const contentType = `image/${fileExt}`;
 
         // トークンを取得
         const token = await AsyncStorage.getItem('userToken');
@@ -132,8 +133,9 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
             `${API_GATEWAY_URL}/get-upload-url`,
             {
               fileName: fileName,
-              fileType: `image/${fileExt}`,
-              uploadType: type === 'profile' ? 'profile-image' : 'cover-image'
+              fileType: contentType,
+              uploadType: type === 'profile' ? 'profile-image' : 'cover-image',
+              bucketName: 'teamder-s3-3twztfaxci8ero71ohusp3888uh6ausw2a-s3alias'
             },
             {
               headers: {
@@ -159,7 +161,7 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
             method: 'PUT',
             body: blob,
             headers: {
-              'Content-Type': `image/${fileExt}`,
+              'Content-Type': contentType,
               'x-amz-acl': 'public-read'
             }
           });

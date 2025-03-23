@@ -257,19 +257,18 @@ export default function SetupScreen() {
 
         try {
           // 1. Presigned URLを取得
-          const cleanToken = token.replace('Bearer ', '');
           const presignedUrlResponse = await axios.post(
             `${API_GATEWAY_URL}/get-upload-url`,
             {
               fileName: fileName,
               fileType: contentType,
-              uploadType: type === 'icon' ? 'profile-image' : 'cover-image'
+              uploadType: type === 'icon' ? 'profile-image' : 'cover-image',
+              bucketName: 'teamder-s3-3twztfaxci8ero71ohusp3888uh6ausw2a-s3alias'
             },
             {
               headers: {
-                'Authorization': cleanToken,
-                'Content-Type': 'application/json',
-                'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
               }
             }
           );
@@ -463,10 +462,20 @@ export default function SetupScreen() {
               focusedInput === 'school' && styles.inputFocused
             ]}
             value={formData.school}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, school: text }))}
+            onChangeText={(text) => {
+              setError(null);
+              setFormData(prev => ({ ...prev, school: text }));
+            }}
             onFocus={() => setFocusedInput('school')}
             onBlur={() => setFocusedInput(null)}
             placeholder="学校名を入力"
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            keyboardType="default"
+            returnKeyType="done"
+            blurOnSubmit={true}
+            enablesReturnKeyAutomatically={true}
           />
         </View>
 
