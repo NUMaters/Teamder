@@ -1226,10 +1226,40 @@ export default function DiscoverScreen() {
             age: String(selectedProfile.age || ''),
             university: selectedProfile.school || '',
             activities: Array.isArray(selectedProfile.activities) 
-              ? selectedProfile.activities.map(activity => typeof activity === 'string' ? activity : activity.title)
+              ? selectedProfile.activities.map(activity => {
+                  if (typeof activity === 'string') {
+                    return {
+                      id: '',
+                      title: activity,
+                      description: '',
+                      period: ''
+                    };
+                  }
+                  return {
+                    id: activity.id || '',
+                    title: activity.title,
+                    description: activity.description || '',
+                    period: activity.period || ''
+                  };
+                })
               : [],
             certifications: Array.isArray(selectedProfile.certifications)
-              ? selectedProfile.certifications.map(cert => typeof cert === 'string' ? cert : cert.name)
+              ? selectedProfile.certifications.map(cert => {
+                  if (typeof cert === 'string') {
+                    return {
+                      id: '',
+                      name: cert,
+                      issueDate: '',
+                      issuingOrganization: ''
+                    };
+                  }
+                  return {
+                    id: cert.id || '',
+                    name: cert.name,
+                    issueDate: cert.issueDate || '',
+                    issuingOrganization: cert.issuingOrganization || ''
+                  };
+                })
               : []
           }}
           isOwnProfile={false}
