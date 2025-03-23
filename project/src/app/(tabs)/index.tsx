@@ -18,7 +18,7 @@ type Category = 'engineers' | 'projects';
 
 enum LikeType {
   LIKE = 'like',
-  SUPERLIKE = 'superlike'
+  SKIP = 'skip'
 }
 
 interface Like {
@@ -109,8 +109,9 @@ type CardData = Profile | Project;
 const CURRENT_USER_ID = 'current-user';
 
 const WINDOW_HEIGHT = Dimensions.get('window').height;
-const CARD_VERTICAL_MARGIN = 340;
-const CARD_HEIGHT = WINDOW_HEIGHT - CARD_VERTICAL_MARGIN;
+const HEADER_HEIGHT = Platform.OS === 'ios' ? 100 : 70; // ヘッダーの高さを小さく
+const BOTTOM_BUTTONS_HEIGHT = 140; // 下部ボタン（モード切替ボタン含む）の高さ
+const CARD_HEIGHT = WINDOW_HEIGHT - HEADER_HEIGHT - BOTTOM_BUTTONS_HEIGHT; // カードの高さを計算
 
 // モックデータを使用して開発を進める
 const MOCK_PROFILES: Profile[] = [
@@ -387,8 +388,6 @@ export default function DiscoverScreen() {
       backgroundColor = '#fee2e2';
     } else if (swipeDirection.value === 'right') {
       backgroundColor = '#dcfce7';
-    } else if (swipeDirection.value === 'top') {
-      backgroundColor = '#e0e7ff';
     }
 
     return {
@@ -402,7 +401,7 @@ export default function DiscoverScreen() {
     };
   });
 
-  const handleSwipeFeedback = (direction: 'left' | 'right' | 'top') => {
+  const handleSwipeFeedback = (direction: 'left' | 'right') => {
     swipeDirection.value = direction;
     bgOpacity.value = withSpring(0.6, { damping: 12 });
     
@@ -416,17 +415,12 @@ export default function DiscoverScreen() {
     const threshold = 50;
     const opacity = Math.min(Math.abs(x) / threshold, 1);
 
-    if (Math.abs(x) > Math.abs(y)) {
-      if (x > 0) {
-        swipeDirection.value = 'right';
-        bgOpacity.value = withTiming(opacity * 0.6, { duration: 0 });
-      } else {
-        swipeDirection.value = 'left';
-        bgOpacity.value = withTiming(opacity * 0.6, { duration: 0 });
-      }
-    } else if (y < 0) {
-      swipeDirection.value = 'top';
-      bgOpacity.value = withTiming(Math.abs(y) / threshold * 0.6, { duration: 0 });
+    if (x > 0) {
+      swipeDirection.value = 'right';
+      bgOpacity.value = withTiming(opacity * 0.6, { duration: 0 });
+    } else {
+      swipeDirection.value = 'left';
+      bgOpacity.value = withTiming(opacity * 0.6, { duration: 0 });
     }
   };
 
@@ -482,34 +476,34 @@ export default function DiscoverScreen() {
       return (
         <View style={[
           styles.likeIndicator,
-          currentUserLike.type === 'superlike' ? styles.superLikeIndicator : styles.likeIndicator,
+          currentUserLike.type === 'like' ? styles.likeIndicator : styles.superLikeIndicator,
         ]}>
-          {currentUserLike.type === 'superlike' ? (
-            <Star size={16} color="#ffffff" fill="#ffffff" />
-          ) : (
+          {currentUserLike.type === 'like' ? (
             <Heart size={16} color="#ffffff" fill="#ffffff" />
+          ) : (
+            <Star size={16} color="#ffffff" fill="#ffffff" />
           )}
           <Text style={styles.likeIndicatorText}>
-            {currentUserLike.type === 'superlike' ? 'スーパーいいね済み' : 'いいね済み'}
+            {currentUserLike.type === 'like' ? 'いいね済み' : 'スーパーいいね済み'}
           </Text>
         </View>
       );
     }
 
     if (otherLikes.length > 0) {
-      const hasSuperLike = otherLikes.some(like => like.type === 'superlike');
+      const hasLike = otherLikes.some(like => like.type === 'like');
       return (
         <View style={[
           styles.likeIndicator,
-          hasSuperLike ? styles.superLikeIndicator : styles.likeIndicator,
+          hasLike ? styles.likeIndicator : styles.superLikeIndicator,
         ]}>
-          {hasSuperLike ? (
-            <Star size={16} color="#ffffff" fill="#ffffff" />
-          ) : (
+          {hasLike ? (
             <Heart size={16} color="#ffffff" fill="#ffffff" />
+          ) : (
+            <Star size={16} color="#ffffff" fill="#ffffff" />
           )}
           <Text style={styles.likeIndicatorText}>
-            {hasSuperLike ? 'スーパーいいねされています' : 'いいねされています'}
+            {hasLike ? 'いいねされています' : 'スーパーいいねされています'}
           </Text>
         </View>
       );
@@ -528,75 +522,72 @@ export default function DiscoverScreen() {
           </View>
           {renderLikeIndicator(profile.likes)}
         </View>
-        <ScrollView style={styles.cardContentScrollView}>
-          <View style={styles.cardContent}>
-            <View style={styles.cardHeader}>
-              <View style={styles.headerLeft}>
-                <Text style={styles.name}>{profile.username}</Text>
-                <Text style={styles.title}>{profile.school}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.viewProfileButton}
-                onPress={() => handleViewProfile(profile)}>
-                <UserCircle2 size={24} color="#6366f1" />
-              </TouchableOpacity>
+        <View style={styles.cardContent}>
+          <View style={styles.cardHeader}>
+            <View style={styles.headerLeft}>
+              <Text style={styles.name}>{profile.username}</Text>
+              <Text style={styles.title}>{profile.school}</Text>
             </View>
-
-            <View style={styles.infoContainer}>
-              <View style={styles.infoRow}>
-                <MapPin size={16} color="#6b7280" />
-                <Text style={styles.infoText}>{profile.location}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Code2 size={16} color="#6b7280" />
-                <Text style={styles.infoText}>{profile.school}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.bio} numberOfLines={3}>
-              {profile.bio}
-            </Text>
-
-            <View style={styles.skillsContainer}>
-              {Array.isArray(profile.skills) && profile.skills.map((skill, index) => {
-                let skillName = '';
-                let skillYears = '未設定';
-
-                // スキルデータの形式に応じた処理
-                if (typeof skill === 'string') {
-                  skillName = skill;
-                } else if (typeof skill === 'object' && skill !== null) {
-                  skillName = skill.name || '';
-                  skillYears = skill.years || '未設定';
-                }
-
-                return skillName ? (
-                  <View key={index} style={styles.skillBadge}>
-                    <Text style={styles.skillText}>{skillName}</Text>
-                    {skillYears !== '未設定' && (
-                      <Text style={styles.skillYearsText}>{skillYears}</Text>
-                    )}
-                  </View>
-                ) : null;
-              })}
-            </View>
-
-            {Array.isArray(profile.interests) && profile.interests.length > 0 && (
-              <View style={styles.interestsContainer}>
-                <Text style={styles.interestsTitle}>興味のある分野</Text>
-                <View style={styles.interestsList}>
-                  {profile.interests.map((interest: string | ApiInterest, index) => (
-                    <View key={index} style={styles.interestBadge}>
-                      <Text style={styles.interestText}>
-                        {typeof interest === 'string' ? interest : interest.name}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
+            <TouchableOpacity
+              style={styles.viewProfileButton}
+              onPress={() => handleViewProfile(profile)}>
+              <UserCircle2 size={24} color="#6366f1" />
+            </TouchableOpacity>
           </View>
-        </ScrollView>
+
+          <View style={styles.infoContainer}>
+            <View style={styles.infoRow}>
+              <MapPin size={16} color="#6b7280" />
+              <Text style={styles.infoText}>{profile.location}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Code2 size={16} color="#6b7280" />
+              <Text style={styles.infoText}>{profile.school}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.bio} numberOfLines={3}>
+            {profile.bio}
+          </Text>
+
+          <View style={styles.skillsContainer}>
+            {Array.isArray(profile.skills) && profile.skills.map((skill, index) => {
+              let skillName = '';
+              let skillYears = '未設定';
+
+              if (typeof skill === 'string') {
+                skillName = skill;
+              } else if (typeof skill === 'object' && skill !== null) {
+                skillName = skill.name || '';
+                skillYears = skill.years || '未設定';
+              }
+
+              return skillName ? (
+                <View key={index} style={styles.skillBadge}>
+                  <Text style={styles.skillText}>{skillName}</Text>
+                  {skillYears !== '未設定' && (
+                    <Text style={styles.skillYearsText}>{skillYears}</Text>
+                  )}
+                </View>
+              ) : null;
+            })}
+          </View>
+
+          {Array.isArray(profile.interests) && profile.interests.length > 0 && (
+            <View style={styles.interestsContainer}>
+              <Text style={styles.interestsTitle}>興味のある分野</Text>
+              <View style={styles.interestsList}>
+                {profile.interests.map((interest: string | ApiInterest, index) => (
+                  <View key={index} style={styles.interestBadge}>
+                    <Text style={styles.interestText}>
+                      {typeof interest === 'string' ? interest : interest.name}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+        </View>
       </View>
     );
   };
@@ -717,20 +708,12 @@ export default function DiscoverScreen() {
           }}
           onSwiping={handleSwiping}
           onSwipedLeft={(cardIndex) => {
-            console.log(`Swiped NOPE on card: ${cardIndex}`);
+            console.log(`Swiped SKIP on card: ${cardIndex}`);
             handleSwipeFeedback('left');
           }}
           onSwipedRight={(cardIndex) => {
             console.log(`Swiped LIKE on card: ${cardIndex}`);
             handleSwipeFeedback('right');
-          }}
-          onSwipedTop={(cardIndex) => {
-            console.log(`Swiped SUPERLIKE on card: ${cardIndex}`);
-            handleSwipeFeedback('top');
-          }}
-          onSwipedBottom={(cardIndex) => {
-            console.log(`Swiped NOPE on card: ${cardIndex}`);
-            handleSwipeFeedback('left');
           }}
           cardIndex={0}
           backgroundColor={'transparent'}
@@ -739,8 +722,8 @@ export default function DiscoverScreen() {
           stackSeparation={14}
           animateOverlayLabelsOpacity
           animateCardOpacity
-          disableTopSwipe
-          disableBottomSwipe
+          disableTopSwipe={true}
+          disableBottomSwipe={true}
           overlayLabels={{
             left: {
               title: 'Skip',
@@ -801,7 +784,7 @@ export default function DiscoverScreen() {
                   marginLeft: 40,
                 },
               },
-            },
+            }
           }}
         />
       </View>
@@ -919,12 +902,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   header: {
-    paddingTop: Platform.OS === 'web' ? 20 : 60,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 10, // 下部の余白を減らす
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+    height: HEADER_HEIGHT,
   },
   headerTop: {
     flexDirection: 'row',
@@ -981,7 +965,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    marginBottom: 100,
+    marginBottom: BOTTOM_BUTTONS_HEIGHT,
   },
   swiperContainer: {
     backgroundColor: 'transparent',
@@ -1049,6 +1033,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardContent: {
+    flex: 1,
     padding: 16,
   },
   cardHeader: {
@@ -1101,7 +1086,8 @@ const styles = StyleSheet.create({
   skillsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
+    marginTop: 12,
   },
   skillBadge: {
     backgroundColor: 'rgba(224, 231, 255, 0.8)',
@@ -1181,7 +1167,7 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ec4899',
+    backgroundColor: '#4fcc94',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
@@ -1204,7 +1190,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   interestsContainer: {
-    marginTop: 12,
+    marginTop: 16,
   },
   interestsTitle: {
     fontSize: 12,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Image, RefreshControl } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Image, RefreshControl, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { createApiRequest } from '@/lib/api-client';
 import { MessageCircle, UserCircle2 } from 'lucide-react-native';
@@ -156,6 +156,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F3F4F6',
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
   },
   loadingContainer: {
     flex: 1,
