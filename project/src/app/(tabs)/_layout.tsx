@@ -42,13 +42,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="create-np"
+        name="create-project"
         options={{
           href: null,
         }}
       />
       <Tabs.Screen
-        name="projects"
+        name="projects/manage"
         options={{
           href: null,
         }}
