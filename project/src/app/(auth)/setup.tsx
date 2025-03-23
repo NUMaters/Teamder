@@ -251,36 +251,66 @@ export default function SetupScreen() {
           return defaultImages[type];
         }
 
-        const fileExt = images[type].uri.split('.').pop();
-        const fileName = `${Date.now()}.${fileExt}`;
-
-        const formData = new FormData();
-        formData.append('file', {
-          uri: images[type].uri,
-          type: `image/${fileExt}`,
-          name: fileName,
-        } as any);
+        const fileExt = images[type].uri.split('.').pop()?.toLowerCase() || 'jpg';
+        const fileName = `${Date.now()}-${type}.${fileExt}`;
+        const contentType = `image/${fileExt}`;
 
         try {
-          const response = await axios.post(
-            `${API_GATEWAY_URL}${type === 'icon' ? '/upload/profile-image' : '/upload/cover-image'}`,
-            formData,
+          // 1. Presigned URLを取得
+          const cleanToken = token.replace('Bearer ', '');
+          const presignedUrlResponse = await axios.post(
+            `${API_GATEWAY_URL}/get-upload-url`,
+            {
+              fileName: fileName,
+              fileType: contentType,
+              uploadType: type === 'icon' ? 'profile-image' : 'cover-image'
+            },
             {
               headers: {
-                'Content-Type': 'multipart/form-data',
-                'Authorization': `Bearer ${token}`,
+                'Authorization': cleanToken,
+                'Content-Type': 'application/json',
                 'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
-              },
-              timeout: 10000,
+              }
             }
           );
 
-          if (response.data?.url) {
-            return response.data.url;
+          if (!presignedUrlResponse.data?.uploadUrl) {
+            throw new Error('アップロードURLの取得に失敗しました');
           }
-          throw new Error('画像URLが返されませんでした');
+
+          const { uploadUrl, objectUrl } = presignedUrlResponse.data;
+
+          // 2. 画像データを取得
+          const response = await fetch(images[type].uri);
+          const blob = await response.blob();
+
+          // 3. Presigned URLを使用してS3に直接アップロード
+          const uploadResponse = await fetch(uploadUrl, {
+            method: 'PUT',
+            body: blob,
+            headers: {
+              'Content-Type': contentType,
+              'x-amz-acl': 'public-read'
+            }
+          });
+
+          if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text();
+            throw new Error(`アップロード失敗: ${errorText}`);
+          }
+
+          console.log(`${type} image uploaded successfully to S3:`, objectUrl);
+          return objectUrl;
+
         } catch (error) {
           console.error(`Error uploading ${type} image:`, error);
+          if (axios.isAxiosError(error)) {
+            console.error('Error details:', {
+              message: error.message,
+              response: error.response?.data,
+              status: error.response?.status
+            });
+          }
           throw error;
         }
       };

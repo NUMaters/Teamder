@@ -1,8 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ExternalLink, Clock, Users, MapPin, CreditCard, Heart } from 'lucide-react-native';
+import { ExternalLink, Clock, Users, MapPin, CreditCard, Heart, Pencil } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import ProjectLikesModal from '@/components/ProjectLikesModal';
+import CreateProjectModal, { ProjectFormData } from '@/components/CreateProjectModal';
 import { createApiRequest, DEFAULT_ICON_URL, DEFAULT_COVER_URL } from '@/lib/api-client';
 
 type ProjectStatus = 'active' | 'paused' | 'completed';
@@ -20,6 +21,7 @@ type Project = {
   status: ProjectStatus;
   created_at: string;
   owner_id: string;
+  skills?: string[];
 };
 
 export default function ManageProjectsScreen() {
@@ -29,6 +31,8 @@ export default function ManageProjectsScreen() {
   const [isLikesModalVisible, setIsLikesModalVisible] = useState(false);
   const [showStatusMenu, setShowStatusMenu] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
 
   useEffect(() => {
     fetchMyProjects();
@@ -45,7 +49,10 @@ export default function ManageProjectsScreen() {
 
       console.log('Current user:', userResponse.data);
 
-      const projectsResponse = await createApiRequest('/projects/my', 'GET');
+      const projectsResponse = await createApiRequest('/get_project', 'POST', {
+        id_token: userResponse.data.id_token
+      });
+
       if (!projectsResponse.data) {
         throw new Error('プロジェクトの取得に失敗しました');
       }
@@ -138,6 +145,52 @@ export default function ManageProjectsScreen() {
     }
   };
 
+  const convertProjectToFormData = (project: Project): ProjectFormData => ({
+    id: project.id,
+    title: project.title,
+    school: project.university,
+    image_url: project.image_url,
+    location: project.location,
+    description: project.description,
+    team_size: project.team_size,
+    duration: project.duration,
+    budget: project.budget,
+    status: project.status,
+    skills: project.skills || [],
+  });
+
+  const convertFormDataToProject = (formData: ProjectFormData, existingProject: Project): Project => ({
+    ...existingProject,
+    title: formData.title,
+    university: formData.school,
+    image_url: formData.image_url,
+    location: formData.location,
+    description: formData.description,
+    team_size: formData.team_size,
+    duration: formData.duration,
+    budget: formData.budget,
+    status: formData.status as ProjectStatus,
+    skills: formData.skills,
+  });
+
+  const handleEditProject = (project: Project) => {
+    setEditingProject(project);
+    setIsEditModalVisible(true);
+  };
+
+  const handleProjectSubmit = (formData: ProjectFormData) => {
+    if (!editingProject) return;
+
+    const updatedProject = convertFormDataToProject(formData, editingProject);
+    setProjects(prev => 
+      prev.map(project => 
+        project.id === updatedProject.id ? updatedProject : project
+      )
+    );
+    setIsEditModalVisible(false);
+    setEditingProject(null);
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -178,7 +231,14 @@ export default function ManageProjectsScreen() {
                   style={styles.projectImage} 
                 />
                 <View style={styles.projectHeaderContent}>
-                  <Text style={styles.projectTitle}>{project.title}</Text>
+                  <View style={styles.projectTitleRow}>
+                    <Text style={styles.projectTitle}>{project.title}</Text>
+                    <TouchableOpacity
+                      style={styles.editButton}
+                      onPress={() => handleEditProject(project)}>
+                      <Pencil size={20} color="#6b7280" />
+                    </TouchableOpacity>
+                  </View>
                   <Text style={styles.universityName}>{project.university}</Text>
                   <TouchableOpacity
                     style={[styles.statusBadge, getStatusStyle(project.status)]}
@@ -269,6 +329,17 @@ export default function ManageProjectsScreen() {
           projectId={selectedProjectId}
         />
       )}
+
+      <CreateProjectModal
+        isVisible={isEditModalVisible}
+        onClose={() => {
+          setIsEditModalVisible(false);
+          setEditingProject(null);
+        }}
+        onSubmit={handleProjectSubmit}
+        initialData={editingProject ? convertProjectToFormData(editingProject) : undefined}
+        isEdit={!!editingProject}
+      />
     </View>
   );
 }
@@ -354,6 +425,11 @@ const styles = StyleSheet.create({
   projectHeaderContent: {
     flex: 1,
     marginLeft: 12,
+  },
+  projectTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   projectTitle: {
     fontSize: 18,
@@ -449,5 +525,8 @@ const styles = StyleSheet.create({
     color: '#6366f1',
     fontSize: 14,
     fontWeight: '600',
+  },
+  editButton: {
+    padding: 4,
   },
 });

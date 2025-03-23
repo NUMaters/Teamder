@@ -215,6 +215,11 @@ export default function DiscoverScreen() {
       setIsLoading(true);
       console.log('Fetching profiles with token:', token);
 
+      // 現在のユーザーのIDを取得
+      const currentUserId = await AsyncStorage.getItem('userId');
+      console.log('Current user ID:', currentUserId);
+      console.log('Current user ID type:', typeof currentUserId);
+
       const response = await axios.post(
         'https://d3iwflz1ce.execute-api.us-west-2.amazonaws.com/v1/get_all_profile',
         {},  // 空のボディを送信
@@ -262,8 +267,23 @@ export default function DiscoverScreen() {
         twitterUsername: profile.twitterUsername || ''
       }));
 
-      console.log('Formatted profiles:', formattedProfiles);
-      setProfiles(formattedProfiles);
+      console.log('All profiles before filtering:', formattedProfiles);
+      console.log('Profile IDs:', formattedProfiles.map(p => ({ id: p.id, type: typeof p.id })));
+
+      // 自分のプロフィールを除外
+      const filteredProfiles = formattedProfiles.filter(profile => {
+        console.log('Comparing:', {
+          profileId: profile.id,
+          profileIdType: typeof profile.id,
+          currentUserId: currentUserId,
+          currentUserIdType: typeof currentUserId,
+          isMatch: profile.id === currentUserId
+        });
+        return profile.id !== currentUserId;
+      });
+
+      console.log('Filtered profiles:', filteredProfiles);
+      setProfiles(filteredProfiles);
 
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
@@ -307,14 +327,21 @@ export default function DiscoverScreen() {
       // トークンからBearerプレフィックスを削除
       const cleanToken = token.replace('Bearer ', '');
 
+      // 現在のユーザーのIDを取得
+      const currentUserId = await AsyncStorage.getItem('userId');
+      console.log('Current user ID:', currentUserId);
+      console.log('Current user ID type:', typeof currentUserId);
+
       const apiResponse = await axios.post(
-        `${API_GATEWAY_URL_PRJ}/get_project`,
+        `${API_GATEWAY_URL_PRJ}/get_all_project`,
         {},
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': cleanToken // Bearerプレフィックスを付けずにトークンを送信
-          }
+            'Authorization': cleanToken,
+            'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+          },
+          timeout: 10000
         }
       );
 
@@ -324,16 +351,61 @@ export default function DiscoverScreen() {
         throw new Error(apiResponse.data.error);
       }
 
-      if (apiResponse.data) {
-        const formattedProjects: Project[] = [apiResponse.data].map(project => ({
-          ...project,
-          likes: project.likes || []
+      if (Array.isArray(apiResponse.data)) {
+        const formattedProjects: Project[] = apiResponse.data.map(project => ({
+          id: project.id || '',
+          owner_id: project.owner_id || '',
+          title: project.title || '',
+          university: project.university || '',
+          image_url: project.image_url || 'https://teamder-aws.s3.us-west-2.amazonaws.com/default-project.png',
+          location: project.location || '',
+          description: project.description || '',
+          team_size: project.team_size || '',
+          duration: project.duration || '',
+          budget: project.budget || '',
+          status: project.status || '募集中',
+          created_at: project.created_at || '',
+          updated_at: project.updated_at || '',
+          likes: Array.isArray(project.likes) ? project.likes : []
         }));
-        setProjects(formattedProjects);
+
+        console.log('All projects before filtering:', formattedProjects);
+        console.log('Project owner IDs:', formattedProjects.map(p => ({ owner_id: p.owner_id, type: typeof p.owner_id })));
+
+        // 自分のプロジェクトを除外
+        const filteredProjects = formattedProjects.filter(project => {
+          console.log('Comparing project:', {
+            ownerId: project.owner_id,
+            ownerIdType: typeof project.owner_id,
+            currentUserId: currentUserId,
+            currentUserIdType: typeof currentUserId,
+            isMatch: project.owner_id === currentUserId
+          });
+          return project.owner_id !== currentUserId;
+        });
+
+        console.log('Filtered projects:', filteredProjects);
+        setProjects(filteredProjects);
+      } else {
+        console.error('Unexpected project data format:', apiResponse.data);
+        throw new Error('プロジェクトデータの形式が不正です');
       }
     } catch (error) {
       console.error('Error fetching projects:', error);
-      Alert.alert('エラー', 'プロジェクトの取得に失敗しました。');
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          Alert.alert('エラー', '認証エラーが発生しました。再度ログインしてください。');
+          router.replace('/(auth)/login');
+        } else if (error.response?.status === 403) {
+          Alert.alert('エラー', 'アクセスが拒否されました');
+        } else if (error.code === 'ECONNABORTED') {
+          Alert.alert('エラー', 'タイムアウトが発生しました。');
+        } else {
+          Alert.alert('エラー', 'プロジェクトの取得に失敗しました。');
+        }
+      } else {
+        Alert.alert('エラー', 'プロジェクトの取得に失敗しました。');
+      }
     } finally {
       setIsLoading(false);
     }

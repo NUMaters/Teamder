@@ -109,13 +109,13 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [1, 1],
+        aspect: type === 'profile' ? [1, 1] : [16, 9],
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const file = result.assets[0];
-        const fileExt = file.uri.split('.').pop();
+        const fileExt = file.uri.split('.').pop()?.toLowerCase() || 'jpg';
         const fileName = `${Date.now()}.${fileExt}`;
 
         // トークンを取得
@@ -125,67 +125,79 @@ export default function EditProfileModal({ isVisible, onClose, onUpdate, initial
           return;
         }
 
-        // FormDataを作成
-        const formData = new FormData();
-        formData.append('file', {
-          uri: file.uri,
-          type: `image/${fileExt}`,
-          name: fileName,
-        } as any);
-
-        console.log('Uploading image:', {
-          uri: file.uri,
-          type: `image/${fileExt}`,
-          name: fileName,
-        });
-
-        // 画像をアップロード
-        const response = await axios.post(
-          `${API_GATEWAY_URL}${type === 'profile' ? '/upload/profile-image' : '/upload/cover-image'}`,
-          formData,
-          {
-            headers: {
-              'Content-Type': 'multipart/form-data',
-              'Authorization': `Bearer ${token}`,
-              'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+        try {
+          // 1. Presigned URLを取得
+          const cleanToken = token.replace('Bearer ', '');
+          const presignedUrlResponse = await axios.post(
+            `${API_GATEWAY_URL}/get-upload-url`,
+            {
+              fileName: fileName,
+              fileType: `image/${fileExt}`,
+              uploadType: type === 'profile' ? 'profile-image' : 'cover-image'
             },
-            timeout: 10000, // 10秒のタイムアウトを設定
+            {
+              headers: {
+                'Authorization': cleanToken,
+                'Content-Type': 'application/json',
+                'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+              }
+            }
+          );
+
+          if (!presignedUrlResponse.data?.uploadUrl) {
+            throw new Error('アップロードURLの取得に失敗しました');
           }
-        );
 
-        console.log('Upload response:', response.data);
+          const { uploadUrl, objectUrl } = presignedUrlResponse.data;
 
-        if (response.data?.url) {
+          // 2. 画像データを取得
+          const response = await fetch(file.uri);
+          const blob = await response.blob();
+
+          // 3. Presigned URLを使用してS3に直接アップロード
+          const uploadResponse = await fetch(uploadUrl, {
+            method: 'PUT',
+            body: blob,
+            headers: {
+              'Content-Type': `image/${fileExt}`,
+              'x-amz-acl': 'public-read'
+            }
+          });
+
+          if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text();
+            throw new Error(`アップロード失敗: ${errorText}`);
+          }
+
+          console.log('Image uploaded successfully to S3:', objectUrl);
+
+          // 4. UIを更新
           setImages(prev => ({
             ...prev,
-            [type === 'profile' ? 'icon' : 'cover']: { uri: response.data.url }
+            [type === 'profile' ? 'icon' : 'cover']: { uri: objectUrl }
           }));
 
-          // フォームデータも更新
+          // 5. フォームデータを更新
           setFormData(prev => ({
             ...prev,
-            [type === 'profile' ? 'imageUrl' : 'coverUrl']: response.data.url
+            [type === 'profile' ? 'imageUrl' : 'coverUrl']: objectUrl
           }));
-        } else {
-          throw new Error('画像URLが返されませんでした');
+
+        } catch (error) {
+          console.error('Error uploading to S3:', error);
+          if (axios.isAxiosError(error)) {
+            console.error('Error details:', {
+              message: error.message,
+              response: error.response?.data,
+              status: error.response?.status
+            });
+          }
+          throw new Error('画像のアップロードに失敗しました');
         }
       }
     } catch (error) {
       console.error('Image upload error:', error);
-      
-      if (axios.isAxiosError(error)) {
-        if (error.code === 'ECONNABORTED') {
-          Alert.alert('エラー', 'アップロードがタイムアウトしました。ネットワーク接続を確認して、もう一度お試しください。');
-        } else if (error.response?.status === 413) {
-          Alert.alert('エラー', '画像サイズが大きすぎます。より小さい画像を選択してください。');
-        } else if (error.response?.status === 403) {
-          Alert.alert('エラー', '認証エラーが発生しました。再度ログインしてください。');
-        } else {
-          Alert.alert('エラー', '画像のアップロードに失敗しました。ネットワーク接続を確認して、もう一度お試しください。');
-        }
-      } else {
-        Alert.alert('エラー', '画像の選択中にエラーが発生しました。もう一度お試しください。');
-      }
+      Alert.alert('エラー', error instanceof Error ? error.message : '画像のアップロードに失敗しました');
     }
   };
 

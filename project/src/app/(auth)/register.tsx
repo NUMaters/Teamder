@@ -173,6 +173,7 @@ export default function RegisterScreen() {
             onBlur={() => setFocusedInput(null)}
             secureTextEntry
             editable={!loading}
+            autoComplete="off"
           />
         </View>
 
@@ -199,6 +200,7 @@ export default function RegisterScreen() {
             onBlur={() => setFocusedInput(null)}
             secureTextEntry
             editable={!loading}
+            autoComplete="off"
           />
         </View>
 

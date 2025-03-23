@@ -38,6 +38,7 @@ const SKILLS = [
 ];
 
 export type ProjectFormData = {
+  id?: string;
   title: string;
   school: string;
   image_url: string;
@@ -54,10 +55,12 @@ type CreateProjectModalProps = {
   isVisible: boolean;
   onClose: () => void;
   onSubmit: (data: ProjectFormData) => void;
+  initialData?: ProjectFormData;
+  isEdit?: boolean;
 };
 
-export default function CreateProjectModal({ isVisible, onClose, onSubmit }: CreateProjectModalProps) {
-  const [formData, setFormData] = useState<ProjectFormData>({
+export default function CreateProjectModal({ isVisible, onClose, onSubmit, initialData, isEdit = false }: CreateProjectModalProps) {
+  const [formData, setFormData] = useState<ProjectFormData>(initialData || {
     title: '',
     school: '',
     image_url: '',
@@ -153,8 +156,11 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
         skills: formData.skills,
       };
 
-      const response = await createApiRequest('/projects', 'POST', projectData);
-      if (!response.data) throw new Error('プロジェクトの作成に失敗しました');
+      const endpoint = isEdit ? `/projects/${initialData?.id}` : '/projects';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const response = await createApiRequest(endpoint, method, projectData);
+      if (!response.data) throw new Error(isEdit ? 'プロジェクトの更新に失敗しました' : 'プロジェクトの作成に失敗しました');
 
       onSubmit(response.data);
       setFormData({
@@ -170,8 +176,8 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
         skills: [],
       });
     } catch (error) {
-      console.error('Error creating project:', error);
-      Alert.alert('エラー', 'プロジェクトの作成に失敗しました。');
+      console.error('Error creating/updating project:', error);
+      Alert.alert('エラー', isEdit ? 'プロジェクトの更新に失敗しました。' : 'プロジェクトの作成に失敗しました。');
     }
   };
 
@@ -186,7 +192,7 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
         style={styles.modalContainer}>
         <View style={styles.modalContent}>
           <View style={styles.header}>
-            <Text style={styles.title}>新規プロジェクト作成</Text>
+            <Text style={styles.title}>{isEdit ? 'プロジェクト編集' : '新規プロジェクト作成'}</Text>
             <TouchableOpacity onPress={onClose}>
               <X size={24} color="#6b7280" />
             </TouchableOpacity>
@@ -380,7 +386,7 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
               <Text style={styles.cancelButtonText}>キャンセル</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-              <Text style={styles.submitButtonText}>作成</Text>
+              <Text style={styles.submitButtonText}>{isEdit ? '更新' : '作成'}</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -122,8 +122,16 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleProfileUpdate = () => {
-    fetchProfile();
+  const handleProfileUpdate = async () => {
+    try {
+      setLoading(true);
+      await fetchProfile();
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      Alert.alert('エラー', 'プロフィールの更新に失敗しました。');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSignOut = async () => {
@@ -179,12 +187,10 @@ export default function ProfileScreen() {
                 githubUsername: profile.githubUsername || '',
                 twitterUsername: profile.twitterUsername || '',
                 interests: (profile.interests || []).map(translateInterest),
-                skills: Array.isArray(profile.skills) 
-                  ? profile.skills.map(skill => ({
-                      name: typeof skill === 'string' ? skill : skill.name || '',
-                      years: typeof skill === 'string' ? '未設定' : skill.years || '未設定'
-                    }))
-                  : [],
+                skills: profile.skills?.map(skill => ({
+                  name: skill.name,
+                  years: skill.years
+                })) || [],
                 age: profile.age?.toString() || '',
                 university: profile.school || '',
                 activities: profile.activities || [],
@@ -213,12 +219,7 @@ export default function ProfileScreen() {
           bio: profile?.bio || '',
           imageUrl: profile?.icon_url || '',
           coverUrl: profile?.cover_url || '',
-          skills: Array.isArray(profile?.skills)
-            ? profile.skills.map(skill => ({
-                name: typeof skill === 'string' ? skill : skill.name || '',
-                years: typeof skill === 'string' ? '未設定' : skill.years || '未設定'
-              }))
-            : [],
+          skills: profile?.skills || [],
           interests: profile?.interests || [],
           age: profile?.age?.toString() || '',
           activities: profile?.activities || []
