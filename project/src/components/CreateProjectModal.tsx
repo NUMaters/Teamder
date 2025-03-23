@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Image, Alert, KeyboardAvoidingView } from 'react-native';
 import { X, Upload, MapPin, Users, Clock, CreditCard, Activity, ChevronDown } from 'lucide-react-native';
-import { createApiRequest } from '@/lib/api-client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
+import * as Crypto from 'expo-crypto';
+
+const API_GATEWAY_URL = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
+const API_GATEWAY_URL_PRJ = process.env.EXPO_PUBLIC_API_GATEWAY_URL_PROJECT;
 
 const LOCATIONS = [
   'オンライン',
@@ -100,9 +105,26 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
         const response = await fetch(file.uri);
         const blob = await response.blob();
 
-        // ユーザーIDを取得
-        const userResponse = await createApiRequest('/user/current', 'GET');
-        if (!userResponse.data?.id) throw new Error('ユーザーが見つかりません');
+        // ユーザートークンを取得
+        const token = await AsyncStorage.getItem('userToken');
+        if (!token) {
+          throw new Error('ユーザートークンが見つかりません');
+        }
+
+        const userResponse = await axios.post(
+          `${API_GATEWAY_URL}/get_profile`,
+          {},
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': token,
+            }
+          }
+        );
+
+        if (!userResponse.data?.id) {
+          throw new Error('ユーザーが見つかりません');
+        }
 
         const formData = new FormData();
         formData.append('file', {
@@ -111,8 +133,20 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
           name: fileName,
         } as any);
 
-        const uploadResponse = await createApiRequest('/upload/project-image', 'POST', formData);
-        if (!uploadResponse.data?.url) throw new Error('画像のアップロードに失敗しました');
+        const uploadResponse = await axios.post(
+          `${API_GATEWAY_URL}/upload/project-image`,
+          formData,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'Authorization': token
+            }
+          }
+        );
+
+        if (!uploadResponse.data?.url) {
+          throw new Error('画像のアップロードに失敗しました');
+        }
 
         setFormData(prev => ({ ...prev, image_url: uploadResponse.data.url }));
       }
@@ -131,18 +165,46 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
     }));
   };
 
+  const generateUUID = async () => {
+    const randomBytes = await Crypto.getRandomValues(new Uint8Array(16));
+    const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (randomBytes[0] & 0x0f) | 0x0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+    return uuid;
+  };
+
   const handleSubmit = async () => {
     try {
-      const userResponse = await createApiRequest('/user/current', 'GET');
-      if (!userResponse.data?.id) throw new Error('ユーザーが見つかりません');
+      // ユーザートークンを取得
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        throw new Error('ユーザートークンが見つかりません');
+      }
+      
+      // ユーザー情報を取得
+      const userResponse = await axios.post(
+        `${API_GATEWAY_URL}/get_profile`,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token,
+            'X-Amz-Date': new Date().toISOString().replace(/[:-]|\.\d{3}/g, '')
+          }
+        }
+      );
 
-      const profileResponse = await createApiRequest('/user/profile', 'GET');
-      if (!profileResponse.data?.location) throw new Error('プロフィールが見つかりません');
+      if (!userResponse.data?.id) {
+        throw new Error('ユーザーが見つかりません');
+      }
 
       const projectData = {
+        id: await generateUUID(),
         owner_id: userResponse.data.id,
         title: formData.title,
-        school: profileResponse.data.location,
+        school: formData.school,
         image_url: formData.image_url,
         location: formData.location,
         description: formData.description,
@@ -153,8 +215,20 @@ export default function CreateProjectModal({ isVisible, onClose, onSubmit }: Cre
         skills: formData.skills,
       };
 
-      const response = await createApiRequest('/projects', 'POST', projectData);
-      if (!response.data) throw new Error('プロジェクトの作成に失敗しました');
+      const response = await axios.post(
+        `${API_GATEWAY_URL_PRJ}/set_project`,
+        projectData,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token
+          }
+        }
+      );
+
+      if (!response.data) {
+        throw new Error('プロジェクトの作成に失敗しました');
+      }
 
       onSubmit(response.data);
       setFormData({
